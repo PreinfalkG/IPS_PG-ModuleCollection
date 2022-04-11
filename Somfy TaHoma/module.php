@@ -181,7 +181,7 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 			$lastUpdate  = time() - round(IPS_GetVariable($this->GetIDForIdent("updateCntError"))["VariableUpdated"]);
 			if ($lastUpdate > $skipUdateSec) {
 
-				$this->UpdateDevices(__FUNCTION__);
+				$this->UpdateAll(__FUNCTION__);
 
 			} else {
 				SetValue($this->GetIDForIdent("updateCntSkip"), GetValue($this->GetIDForIdent("updateCntSkip")) + 1);
@@ -193,7 +193,7 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 
 		
 		public function UpdateTaHomaDevices(string $caller='?') {
-			if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("Update TaHoma Devices [%s] ...", $caller), 0); }
+			//if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("Update TaHoma Devices [%s] ...", $caller), 0); }
 			$devices = $this->GetTaHomaDevices();
 
 			if($devices !== false) {
@@ -247,8 +247,6 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 							//SaveVariableValue($value, $parentId, $varIdent, $varName, $varType=3, $position=0, $varProfile="", $asMaxValue=false) {
 						}
 
-
-
 						$pos = 100;
 						foreach ($device["states"] as $state) {
 							$stateName =  $state["name"];
@@ -273,12 +271,15 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 							//
 							$pos++;
 						}
-						//return;
-
+						
+						if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("TaHoma Devices updated [%s] ...", $caller), 0); }
 				}
-
+				return true;
 			//	$this->UpdateIpsVariables($dataArr, "Charger_Infos", 20, "Site", 30);
-            } else { if($this->logLevel >= LogLevel::WARN) { $this->AddLog(__FUNCTION__, "WARN :: IPS Variables NOT updated !", 0); } }	
+            } else { 
+				if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, "WARN :: IPS Variables NOT updated !", 0); } 
+				return false;
+			}	
 		}			
 
 		//commands: my, setPosition, close, up, open, down, stop
@@ -509,7 +510,7 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 		protected function RegisterVariables() {
 		
 			$this->RegisterVariableInteger("updateCntOk", "Update Cnt", "", 910);
-			$this->RegisterVariableFloat("updateCntSkip", "Update Cnt Skip", "", 911);	
+			$this->RegisterVariableInteger("updateCntSkip", "Update Cnt Skip", "", 911);	
 			$this->RegisterVariableInteger("updateCntError", "Update Cnt Error", "", 912);
 			$this->RegisterVariableString("updateLastError", "Update Last Error", "", 913);
 			$this->RegisterVariableInteger("updateHttpStatus", "Update HTTP Status", "", 914);
