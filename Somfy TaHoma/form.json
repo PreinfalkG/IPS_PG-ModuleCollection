@@ -1,0 +1,123 @@
+{
+    "elements": [
+        {
+            "name": "AutoUpdate",
+            "type": "CheckBox",
+            "caption": "Auto Update TaHoma Devices"
+        },
+        {
+            "name": "TimerInterval",
+            "type": "NumberSpinner",
+            "caption": "Update Interval [sec]"
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "TaHoma API and Gateway Settings",
+            "expanded": true,
+            "visible": true,
+            "items": [
+                { "name": "tbUserId", "type": "ValidationTextBox", "caption": "Somfy Cloud UserId" },
+                { "name": "tbUserPassword", "type": "ValidationTextBox", "caption": "Somfy Cloud Password" },
+                { "name": "tbGatewayIp", "type": "ValidationTextBox", "caption": "TaHoma Switch Local IP" },
+                { "name": "tbGatewayPin", "type": "ValidationTextBox", "caption": "TaHoma Switch Gateway PIN (eg. 1234-5678-9012)" },
+                { "name": "tbTokenLabel", "type": "ValidationTextBox", "caption": "Token Label (for activation)" }
+            ]
+        },        
+        {
+            "name": "LogLevel",
+            "type": "Select",
+            "caption": "Debug/Log Level",
+            "options": [
+                {
+                    "label": "ALL",
+                    "value": 9
+                },
+                {
+                    "label": "TEST",
+                    "value": 8
+                },
+                {
+                    "label": "TRACE",
+                    "value": 7
+                },
+                {
+                    "label": "COMMUNICATION",
+                    "value": 6
+                },
+                {
+                    "label": "DEBUG",
+                    "value": 5
+                },
+                {
+                    "label": "INFO",
+                    "value": 4
+                },
+                {
+                    "label": "WARN",
+                    "value": 3
+                },
+                {
+                    "label": "ERROR",
+                    "value": 2
+                },
+                {
+                    "label": "FATAL",
+                    "value": 1
+                },
+                {
+                    "label": "OFF",
+                    "value": 0
+                }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "type": "Button",
+            "caption": "Update All",
+            "onClick": "TaHomaSwitch_UpdateAll($id, 'ModulForm');"
+        },	        
+        {
+            "type": "ExpansionPanel",
+            "caption": "API Authentication",
+            "expanded": false,
+            "visible": true,
+            "items": [
+                {
+                    "type": "Button",
+                    "caption": "Negociate Local TOKEN (login, create and activate token)",
+                    "onClick": "TaHomaSwitch_NegociateToken($id, 'Modul Form');"
+                }                             
+            ]
+        },        
+        {
+            "type": "ExpansionPanel",
+            "caption": "Reset and Profiling Functions",
+            "expanded": false,
+            "visible": true,
+            "items": [
+                {
+                    "type": "Button",
+                    "caption": "Reset 'Update Variables'",
+                    "onClick": "TaHomaSwitch_Reset_UpdateVariables($id, 'Modul Form');"
+                },
+                {
+                    "type": "Button",
+                    "caption": "Reset 'Token'",
+                    "onClick": "TaHomaSwitch_Reset_Token($id, 'Modul Form');"
+                },
+                {
+                    "type": "Button",
+                    "caption": "Get 'Profiling Data'",
+                    "onClick": "TaHomaSwitch_GetProfilingDataAsText($id, 'Modul Form');"
+                },                 
+                {
+                    "type": "Button",
+                    "caption": "Reset 'Profiling Data'",
+                    "onClick": "TaHomaSwitch_Reset_ProfilingData($id, 'Modul Form');"
+                }                                 
+            ]
+        }
+    ],
+    "status": []
+}

@@ -1,0 +1,12 @@
+{
+    "id": "{0BF6EB4B-9D70-47B8-BB97-C037AB0D3A3A}",
+    "name": "Somfy TaHoma",
+    "type": 3,
+    "vendor": "Somfy",
+    "aliases": ["Somfy TaHoma Switch"],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "TaHomaSwitch",
+    "url": "https://github.com/Somfy-Developer/Somfy-TaHoma-Developer-Mode"
+}
