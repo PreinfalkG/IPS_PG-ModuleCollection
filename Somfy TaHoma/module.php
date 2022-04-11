@@ -556,7 +556,7 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 				$varId_LastWebFrontCommands = $this->GetIDForIdent("lastWebFrontCommands");
 				/*$scriptContent = '<? $varId=$_IPS["VARIABLE"]; SetValue($varId, $_IPS["VALUE"]); BYD_CloseConnection(IPS_GetParent($varId)); ?>'; */
 				/*$actionScriptContent_ShutterIO = sprintf('<? const VARID_LastCommand = %s; $varId=$_IPS["VARIABLE"]; SetValue($varId, $_IPS["VALUE"]); ?>', $varId_LastTaHomaCommand);*/
-				$actionScriptContent_ShutterIO = $this->LoadFileContents(__DIR__."\actionSkript_Template_RTS.php");
+				$actionScriptContent_ShutterIO = $this->LoadFileContents(__DIR__."\actionSkript_Template_IO.php");
 				$actionScriptContent_ShutterIO = str_replace("%%INSTANZID%%", $this->InstanceID, $actionScriptContent_ShutterIO);
 				$actionScriptContent_ShutterIO = str_replace("%%VARID_LastCommands%%", $varId_LastWebFrontCommands, $actionScriptContent_ShutterIO);
 				$actionsSkriptId_ShutterIO = $this->RegisterScript(self::IDENT_ActionsSkriptShutterIO, "Aktionsskript IO Shutter", $actionScriptContent_ShutterIO, 990);
