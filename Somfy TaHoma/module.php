@@ -214,66 +214,66 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 						//$this->AddLog(__FUNCTION__, $logMsg, 0); 
 					}
 
-						$categiryIdent = str_replace(':','', $controllableName);
-						$dummyModulIdent = str_replace('://','', $deviceURL);
-						$dummyModulIdent = str_replace($this->gatewayPin,'_', $dummyModulIdent);
-						$dummyModulIdent = str_replace('_/','_', $dummyModulIdent);
-						$dummyModulIdent = str_replace('/','', $dummyModulIdent);
+					$categiryIdent = str_replace(':','', $controllableName);
+					$dummyModulIdent = str_replace('://','', $deviceURL);
+					$dummyModulIdent = str_replace($this->gatewayPin,'_', $dummyModulIdent);
+					$dummyModulIdent = str_replace('_/','_', $dummyModulIdent);
+					$dummyModulIdent = str_replace('/','', $dummyModulIdent);
 
-						if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, sprintf(" - %s [%s] {available: %b | synced: %b | enabled: %b}", $label, $dummyModulIdent, $available, $synced, $enabled), 0); }
-						//if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, sprintf(" %s - %s\r\n", $categiryIdent, $dummyModulIdent), 0); }
-	
-						$categoryId = $this->GetCategoryID($categiryIdent, $controllableName, $this->parentRootId, 0);
-						$dummyModulId = $this->GetDummyModuleID($dummyModulIdent, $label, $categoryId, 0);
-						IPS_SetInfo($dummyModulId, $deviceURL);
+					if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, sprintf(" - %s [%s] {available: %b | synced: %b | enabled: %b}", $label, $dummyModulIdent, $available, $synced, $enabled), 0); }
+					//if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, sprintf(" %s - %s\r\n", $categiryIdent, $dummyModulIdent), 0); }
 
-						if($controllableName == "rts:ExteriorVenetianBlindRTSComponent") {
-							//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
-							$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.RTS");
-							IPS_SetInfo($varId, $deviceURL);	
-							IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterRTS")));
-						}
+					$categoryId = $this->GetCategoryID($categiryIdent, $controllableName, $this->parentRootId, 0);
+					$dummyModulId = $this->GetDummyModuleID($dummyModulIdent, $label, $categoryId, 0);
+					IPS_SetInfo($dummyModulId, $deviceURL);
 
-						if($controllableName == "io:HorizontalAwningIOComponent") {
-							//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
-							$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.IO");
-							IPS_SetInfo($varId, $deviceURL);	
-							IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterIO")));
+					if($controllableName == "rts:ExteriorVenetianBlindRTSComponent") {
+						//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
+						$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.RTS");
+						IPS_SetInfo($varId, $deviceURL);	
+						IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterRTS")));
+					}
 
-							//$this->SaveVariableValue($label, $dummyModulId, "label", "label", VARIABLE::TYPE_STRING, 200, "");
-							$this->SaveVariableValue($available, $dummyModulId, "available", "available", VARIABLE::TYPE_BOOLEAN, 200, "");
-							$this->SaveVariableValue($synced, $dummyModulId, "synced", "synced", VARIABLE::TYPE_BOOLEAN, 201, "");
-							$this->SaveVariableValue($enabled, $dummyModulId, "enabled", "enabled", VARIABLE::TYPE_BOOLEAN, 202, "");
-							//SaveVariableValue($value, $parentId, $varIdent, $varName, $varType=3, $position=0, $varProfile="", $asMaxValue=false) {
-						}
+					if($controllableName == "io:HorizontalAwningIOComponent") {
+						//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
+						$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.IO");
+						IPS_SetInfo($varId, $deviceURL);	
+						IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterIO")));
 
-						$pos = 100;
-						foreach ($device["states"] as $state) {
-							$stateName =  $state["name"];
-							$stateIdent = str_replace(':','_', $stateName);
-							$stateName = str_replace('core:','', $stateName);
-							$stateValue =  $state["value"];
+						//$this->SaveVariableValue($label, $dummyModulId, "label", "label", VARIABLE::TYPE_STRING, 200, "");
+						$this->SaveVariableValue($available, $dummyModulId, "available", "available", VARIABLE::TYPE_BOOLEAN, 200, "");
+						$this->SaveVariableValue($synced, $dummyModulId, "synced", "synced", VARIABLE::TYPE_BOOLEAN, 201, "");
+						$this->SaveVariableValue($enabled, $dummyModulId, "enabled", "enabled", VARIABLE::TYPE_BOOLEAN, 202, "");
+						//SaveVariableValue($value, $parentId, $varIdent, $varName, $varType=3, $position=0, $varProfile="", $asMaxValue=false) {
+					}
 
-							if(is_array($stateValue)){
-								foreach ($stateValue as $key => $value) {
-									$this->SaveVariableValue($value, $dummyModulId, $stateIdent."_".$key, $key, -1, $pos, "");
-								}
+					$pos = 100;
+					foreach ($device["states"] as $state) {
+						$stateName =  $state["name"];
+						$stateIdent = str_replace(':','_', $stateName);
+						$stateName = str_replace('core:','', $stateName);
+						$stateValue =  $state["value"];
 
-							} else {
-								$this->SaveVariableValue($stateValue, $dummyModulId, $stateIdent, $stateName, -1, $pos, "");
+						if(is_array($stateValue)){
+							foreach ($stateValue as $key => $value) {
+								$this->SaveVariableValue($value, $dummyModulId, $stateIdent."_".$key, $key, -1, $pos, "");
 							}
 
-							if($this->logLevel >= LogLevel::TRACE) { 
-								$logMsg = sprintf("  categiryIdent: %s :: dummyModulIdent: %s |  stateIdent: %s |  stateName: %s | # stateType: %s | Count: %s\r\n", $categiryIdent, $dummyModulIdent, $stateIdent, $stateName, gettype($stateValue), print_r($stateValue, true));
-								$this->AddLog(__FUNCTION__, $logMsg, 0); 
-							}
-
-							//
-							$pos++;
+						} else {
+							$this->SaveVariableValue($stateValue, $dummyModulId, $stateIdent, $stateName, -1, $pos, "");
 						}
-						
-						if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("TaHoma Devices updated [%s] ...", $caller), 0); }
+
+						if($this->logLevel >= LogLevel::TRACE) { 
+							$logMsg = sprintf("  categiryIdent: %s :: dummyModulIdent: %s |  stateIdent: %s |  stateName: %s | # stateType: %s | Count: %s\r\n", $categiryIdent, $dummyModulIdent, $stateIdent, $stateName, gettype($stateValue), print_r($stateValue, true));
+							$this->AddLog(__FUNCTION__, $logMsg, 0); 
+						}
+
+						//
+						$pos++;
+					}
+
 				}
+				if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("TaHoma Devices updated [%s] ...", $caller), 0); }
 				return true;
 			//	$this->UpdateIpsVariables($dataArr, "Charger_Infos", 20, "Site", 30);
             } else { 
