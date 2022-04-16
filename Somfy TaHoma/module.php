@@ -223,44 +223,71 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 					if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, sprintf(" - %s [%s] {available: %b | synced: %b | enabled: %b}", $label, $dummyModulIdent, $available, $synced, $enabled), 0); }
 					//if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, sprintf(" %s - %s\r\n", $categiryIdent, $dummyModulIdent), 0); }
 
-					$categoryId = $this->GetCategoryID($categiryIdent, $controllableName, $this->parentRootId, 0);
-					$dummyModulId = $this->GetDummyModuleID($dummyModulIdent, $label, $categoryId, 0);
-					IPS_SetInfo($dummyModulId, $deviceURL);
 
-					if($controllableName == "rts:ExteriorVenetianBlindRTSComponent") {
-						//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
-						$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.RTS");
-						IPS_SetInfo($varId, $deviceURL);	
-						IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterRTS")));
+					switch($controllableName) {
+
+						case "rts:ExteriorVenetianBlindRTSComponent":
+
+							$categoryId = $this->GetCategoryID($categiryIdent, "Raffstore WZ", $this->parentRootId, 0);
+							$dummyModulId = $this->GetDummyModuleID($dummyModulIdent, $label, $categoryId, 0);
+							IPS_SetInfo($dummyModulId, $deviceURL);
+
+							//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
+							$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.RTS");
+							IPS_SetInfo($varId, $deviceURL);	
+							IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterRTS")));
+
+							break;
+
+						case "io:HorizontalAwningIOComponent":
+							
+							$categoryId = $this->GetCategoryID($categiryIdent, "Terrassendachmarkisen", $this->parentRootId, 0);
+							$dummyModulId = $this->GetDummyModuleID($dummyModulIdent, $label, $categoryId, 0);
+							IPS_SetInfo($dummyModulId, $deviceURL);
+							
+							//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
+							$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.RTS");
+							IPS_SetInfo($varId, $deviceURL);	
+							IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterRTS")));							
+							
+							//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
+							$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.IO");
+							IPS_SetInfo($varId, $deviceURL);	
+							IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterIO")));
+
+							//$this->SaveVariableValue($label, $dummyModulId, "label", "label", VARIABLE::TYPE_STRING, 200, "");
+							$this->SaveVariableValue($available, $dummyModulId, "available", "available", VARIABLE::TYPE_BOOLEAN, 200, "");
+							$this->SaveVariableValue($synced, $dummyModulId, "synced", "synced", VARIABLE::TYPE_BOOLEAN, 201, "");
+							$this->SaveVariableValue($enabled, $dummyModulId, "enabled", "enabled", VARIABLE::TYPE_BOOLEAN, 202, "");
+							//SaveVariableValue($value, $parentId, $varIdent, $varName, $varType=3, $position=0, $varProfile="", $asMaxValue=false) {
+
+							break;
+
+						case "io:VerticalExteriorAwningIOComponent":
+
+							$categoryId = $this->GetCategoryID($categiryIdent, "Senkrechtmarkisen", $this->parentRootId, 0);
+							$dummyModulId = $this->GetDummyModuleID($dummyModulIdent, $label, $categoryId, 0);
+							IPS_SetInfo($dummyModulId, $deviceURL);
+
+							//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
+							$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.IO");
+							IPS_SetInfo($varId, $deviceURL);	
+							IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterIO")));
+
+							//$this->SaveVariableValue($label, $dummyModulId, "label", "label", VARIABLE::TYPE_STRING, 200, "");
+							$this->SaveVariableValue($available, $dummyModulId, "available", "available", VARIABLE::TYPE_BOOLEAN, 200, "");
+							$this->SaveVariableValue($synced, $dummyModulId, "synced", "synced", VARIABLE::TYPE_BOOLEAN, 201, "");
+							$this->SaveVariableValue($enabled, $dummyModulId, "enabled", "enabled", VARIABLE::TYPE_BOOLEAN, 202, "");
+							//SaveVariableValue($value, $parentId, $varIdent, $varName, $varType=3, $position=0, $varProfile="", $asMaxValue=false) {							
+
+							break;
+							
+						default:
+							$categoryId = $this->GetCategoryID($categiryIdent, $controllableName, $this->parentRootId, 0);
+							$dummyModulId = $this->GetDummyModuleID($dummyModulIdent, $label, $categoryId, 0);
+							IPS_SetInfo($dummyModulId, $deviceURL);
+							break;						
 					}
-
-					if($controllableName == "io:HorizontalAwningIOComponent") {
-						//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
-						$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.IO");
-						IPS_SetInfo($varId, $deviceURL);	
-						IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterIO")));
-
-						//$this->SaveVariableValue($label, $dummyModulId, "label", "label", VARIABLE::TYPE_STRING, 200, "");
-						$this->SaveVariableValue($available, $dummyModulId, "available", "available", VARIABLE::TYPE_BOOLEAN, 200, "");
-						$this->SaveVariableValue($synced, $dummyModulId, "synced", "synced", VARIABLE::TYPE_BOOLEAN, 201, "");
-						$this->SaveVariableValue($enabled, $dummyModulId, "enabled", "enabled", VARIABLE::TYPE_BOOLEAN, 202, "");
-						//SaveVariableValue($value, $parentId, $varIdent, $varName, $varType=3, $position=0, $varProfile="", $asMaxValue=false) {
-					}
-
-					if($controllableName == "io:VerticalExteriorAwningIOComponent") {
-						//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
-						$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.IO");
-						IPS_SetInfo($varId, $deviceURL);	
-						IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterIO")));
-
-						//$this->SaveVariableValue($label, $dummyModulId, "label", "label", VARIABLE::TYPE_STRING, 200, "");
-						$this->SaveVariableValue($available, $dummyModulId, "available", "available", VARIABLE::TYPE_BOOLEAN, 200, "");
-						$this->SaveVariableValue($synced, $dummyModulId, "synced", "synced", VARIABLE::TYPE_BOOLEAN, 201, "");
-						$this->SaveVariableValue($enabled, $dummyModulId, "enabled", "enabled", VARIABLE::TYPE_BOOLEAN, 202, "");
-						//SaveVariableValue($value, $parentId, $varIdent, $varName, $varType=3, $position=0, $varProfile="", $asMaxValue=false) {
-					}
-
-
 
 					$pos = 100;
 					foreach ($device["states"] as $state) {
