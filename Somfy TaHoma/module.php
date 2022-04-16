@@ -247,6 +247,21 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 						//SaveVariableValue($value, $parentId, $varIdent, $varName, $varType=3, $position=0, $varProfile="", $asMaxValue=false) {
 					}
 
+					if($controllableName == "io:VerticalExteriorAwningIOComponent") {
+						//$varId = $this->GetOrCreateIpsVariable($dummyModulIdent, ["up", "my", "down", "stop"]);
+						$varId = $this->GetOrCreateIpsVariable($dummyModulId, "ControlShutter", "Steuerung", VARIABLE::TYPE_INTEGER, $position=10, $varProfile="Somfy.ShutterPosition.IO");
+						IPS_SetInfo($varId, $deviceURL);	
+						IPS_SetVariableCustomAction($varId, GetValue($this->GetIDForIdent("actionsSkriptId_ShutterIO")));
+
+						//$this->SaveVariableValue($label, $dummyModulId, "label", "label", VARIABLE::TYPE_STRING, 200, "");
+						$this->SaveVariableValue($available, $dummyModulId, "available", "available", VARIABLE::TYPE_BOOLEAN, 200, "");
+						$this->SaveVariableValue($synced, $dummyModulId, "synced", "synced", VARIABLE::TYPE_BOOLEAN, 201, "");
+						$this->SaveVariableValue($enabled, $dummyModulId, "enabled", "enabled", VARIABLE::TYPE_BOOLEAN, 202, "");
+						//SaveVariableValue($value, $parentId, $varIdent, $varName, $varType=3, $position=0, $varProfile="", $asMaxValue=false) {
+					}
+
+
+
 					$pos = 100;
 					foreach ($device["states"] as $state) {
 						$stateName =  $state["name"];
