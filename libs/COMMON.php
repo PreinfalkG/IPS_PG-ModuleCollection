@@ -214,7 +214,7 @@ trait PG_COMMON {
     protected function WebFrontVarAddText($varId, $text, $cutAt=4000) {
         $tempText = GetValue($varId);
         $text = $text . "\n" . $tempText;
-        if(strlen($text) > $cutAt) { $logText = substr($text, 0, $cutAt); }        
+        if(strlen($text) > $cutAt) { $text = substr($text, 0, $cutAt); }        
         SetValue($varId, $text);
 
     }
