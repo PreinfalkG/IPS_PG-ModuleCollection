@@ -21,7 +21,6 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 		private $logLevel = 3;
 		private $enableIPSLogOutput = false;
 		private $parentRootId;
-		private $archivInstanzID;
 
 		private $somfyUserId;
 		private $somfyPassword;
@@ -44,7 +43,6 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 			if(IPS_InstanceExists($InstanceID)) {
 
 				$this->parentRootId = IPS_GetParent($InstanceID);
-				$this->archivInstanzID = IPS_GetInstanceListByModuleID("{43192F0B-135B-4CE7-A0A7-1475603F3060}")[0];
 
 				$currentStatus = $this->GetStatus();
 				if($currentStatus == 102) {				//Instanz ist aktiv
@@ -101,7 +99,7 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 				$this->RegisterAttributeFloat("prof_" . $profName . "_Duration", 0);
 			}
 			
-			$this->RegisterTimer('Timer_AutoUpdate', 0, 'TaHomaSwitch_Timer_AutoUpdate($_IPS["TARGET"]);');
+			$this->RegisterTimer('TimerAutoUpdate_TaHomeSwitch', 0, 'TaHomaSwitch_TimerAutoUpdate_TaHomeSwitch($_IPS["TARGET"]);');
 
 			$runlevel = IPS_GetKernelRunlevel();
 			if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, sprintf("KernelRunlevel '%s'", $runlevel), 0); }	
@@ -169,13 +167,13 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 				if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("Set Auto-Update Timer Intervall to %s sec", $timerInterval), 0); }
 				//$this->UpdateTaHomaDevices(__FUNCTION__);
 			}
-			$this->SetTimerInterval("Timer_AutoUpdate", $timerInterval*1000);	
+			$this->SetTimerInterval("TimerAutoUpdate_TaHomeSwitch", $timerInterval*1000);	
 		}
 
 
-		public function Timer_AutoUpdate() {
+		public function TimerAutoUpdate_TaHomeSwitch() {
 
-			if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, "Timer_AutoUpdate called ...", 0); }
+			if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, "TimerAutoUpdate_TaHomeSwitch called ...", 0); }
 
 			$skipUdateSec = 600;
 			$lastUpdate  = time() - round(IPS_GetVariable($this->GetIDForIdent("updateCntError"))["VariableUpdated"]);
@@ -565,8 +563,8 @@ require_once __DIR__ . '/../libs/vendor/autoload.php';
 			$this->RegisterVariableString("lastTaHomaCommands", "last TaHoma Commands", "~TextBox", 970);
 			$this->RegisterVariableString("lastWebFrontCommands", "last WebFront Commands", "~TextBox", 970);
 
-
-			IPS_ApplyChanges($this->archivInstanzID);
+			$archivInstanzID = IPS_GetInstanceListByModuleID("{43192F0B-135B-4CE7-A0A7-1475603F3060}")[0];
+			IPS_ApplyChanges($archivInstanzID);
 			if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, "Variables registered", 0); }
 
 		}

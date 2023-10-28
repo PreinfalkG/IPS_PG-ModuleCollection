@@ -160,8 +160,9 @@ trait PG_COMMON {
             IPS_SetName($varId, $varName);
             IPS_SetPosition($varId, $position);
             IPS_SetVariableCustomProfile($varId, $varProfile);
-            //AC_SetLoggingStatus ($this->archivInstanzID, $varId, true);
-            //IPS_ApplyChanges($this->archivInstanzID);
+            //$archivInstanzID = IPS_GetInstanceListByModuleID("{43192F0B-135B-4CE7-A0A7-1475603F3060}")[0];
+            //AC_SetLoggingStatus ($archivInstanzID, $varId, true);
+            //IPS_ApplyChanges($archivInstanzID);
 
         }			
         
@@ -199,8 +200,9 @@ trait PG_COMMON {
             IPS_SetName($varId, $varName);
             IPS_SetPosition($varId, $position);
             IPS_SetVariableCustomProfile($varId, $varProfile);
-            //AC_SetLoggingStatus ($this->archivInstanzID, $varId, true);
-            //IPS_ApplyChanges($this->archivInstanzID);
+            //$archivInstanzID = IPS_GetInstanceListByModuleID("{43192F0B-135B-4CE7-A0A7-1475603F3060}")[0];
+            //AC_SetLoggingStatus ($archivInstanzID, $varId, true);
+            //IPS_ApplyChanges($archivInstanzID);
         }			
         return $varId;
     }
