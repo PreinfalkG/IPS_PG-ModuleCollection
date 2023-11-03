@@ -23,12 +23,12 @@ abstract class VARIABLE {
 trait PG_COMMON {
 
     protected function profilingStart($profName) {
-        if($this->logLevel >= LogLevel::TEST) { $this->AddLog(__FUNCTION__, $profName . "...", 0); }
+        if($this->logLevel >= LogLevel::TEST) { $this->AddLog(__FUNCTION__, $profName . "..."); }
         $profAttrCnt = "prof_" . $profName;
         $profAttrDuration = "prof_" . $profName . "_Duration";
         $this->WriteAttributeInteger($profAttrCnt, $this->ReadAttributeInteger($profAttrCnt)+1);
         $this->WriteAttributeFloat($profAttrDuration, microtime(true));
-        if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, sprintf("%s [Cnt: %s]", $profName, $this->ReadAttributeInteger($profAttrCnt)), 0); }
+        if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, sprintf("%s [Cnt: %s]", $profName, $this->ReadAttributeInteger($profAttrCnt))); }
     }
 
     protected function profilingEnd($profName, $doUpdateCnt=true) {     
@@ -38,7 +38,7 @@ trait PG_COMMON {
         $duration = $this->CalcDuration_ms($this->ReadAttributeFloat($profAttrDuration));
         $this->WriteAttributeFloat($profAttrDuration, $duration);			
         if($doUpdateCnt) { SetValue($this->GetIDForIdent("updateCntOk"), GetValue($this->GetIDForIdent("updateCntOk")) + 1); }
-        if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, sprintf("%s [Cnt: %s | Duration: %s ms]", $profName, $this->ReadAttributeInteger($profAttrCnt), $duration), 0); }
+        if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, sprintf("%s [Cnt: %s | Duration: %s ms]", $profName, $this->ReadAttributeInteger($profAttrCnt), $duration)); }
     }	
     
     protected function profilingFault($profName, $msg) {
@@ -48,11 +48,11 @@ trait PG_COMMON {
         $this->WriteAttributeFloat($profAttrDuration, -1);	
         SetValue($this->GetIDForIdent("updateCntError"), GetValue($this->GetIDForIdent("updateCntError")) + 1);  
         SetValue($this->GetIDForIdent("updateLastError"), $msg);			
-        if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, sprintf("%s [Cnt: %s | msg: %s ]", $profName, $this->ReadAttributeInteger($profAttrCnt), $msg), 0); }        
+        if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, sprintf("%s [Cnt: %s | msg: %s ]", $profName, $this->ReadAttributeInteger($profAttrCnt), $msg)); }        
     }	
 
     public function GetProfilingData(string $caller='?') {
-        if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("GetProfilingData [%s] ...", $caller), 0); }
+        if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("GetProfilingData [%s] ...", $caller)); }
         $profDataArr = [];
         foreach(self::PROF_NAMES as $profName) {
             $arrEntry = array();
@@ -66,7 +66,7 @@ trait PG_COMMON {
     }
 
     public function GetProfilingDataAsText(string $caller='?') {
-        if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("GetProfilingDataAsText [%s] ...", $caller), 0); }
+        if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("GetProfilingDataAsText [%s] ...", $caller)); }
         $profilingInfo = "";
         foreach(self::PROF_NAMES as $profName) {
             $profilingInfo .= sprintf("\r\n%s: %s\r\n",  $profName, $this->ReadAttributeInteger("prof_" . $profName));
@@ -79,7 +79,7 @@ trait PG_COMMON {
     }
 
     public function Reset_ProfilingData(string $caller='?') {
-        if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("Reset_ProfilingData [%s] ...", $caller), 0); }
+        if($this->logLevel >= LogLevel::INFO) { $this->AddLog(__FUNCTION__, sprintf("Reset_ProfilingData [%s] ...", $caller)); }
         foreach(self::PROF_NAMES as $profName) {
             $this->WriteAttributeInteger("prof_" . $profName, 0);
             $this->WriteAttributeInteger("prof_" . $profName . "_OK", 0);
@@ -95,7 +95,7 @@ trait PG_COMMON {
         if ($categoryId == false) {
 
             if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, 
-                sprintf("Create IPS-Category :: Name: %s | Ident: %s | ParentId: %s", $categoryName, $identName, $parentId), 0); }	
+                sprintf("Create IPS-Category :: Name: %s | Ident: %s | ParentId: %s", $categoryName, $identName, $parentId)); }	
 
             $categoryId = IPS_CreateCategory();
             IPS_SetParent($categoryId, $parentId);
@@ -114,7 +114,7 @@ trait PG_COMMON {
         if ($instanceId == false) {
 
             if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, 
-                sprintf("Create Dummy-Module :: Name: %s | Ident: %s | ParentId: %s", $instanceName, $identName, $parentId), 0); }	
+                sprintf("Create Dummy-Module :: Name: %s | Ident: %s | ParentId: %s", $instanceName, $identName, $parentId)); }	
 
             $instanceId = IPS_CreateInstance("{485D0419-BE97-4548-AA9C-C083EB82E61E}");
             IPS_SetParent($instanceId, $parentId);
@@ -152,7 +152,7 @@ trait PG_COMMON {
             }
 
             if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, 
-                sprintf("Create IPS-Variable :: Type: %d | Ident: %s | Profile: %s | Name: %s", $varType, $varIdent, $varProfile, $varName), 0); }	
+                sprintf("Create IPS-Variable :: Type: %d | Ident: %s | Profile: %s | Name: %s", $varType, $varIdent, $varProfile, $varName)); }	
 
             $varId = IPS_CreateVariable($varType);
             IPS_SetParent($varId, $parentId);
@@ -178,7 +178,7 @@ trait PG_COMMON {
             }
             $result = SetValue($varId, $value);  
             if(!$result) {
-                if($this->logLevel >= LogLevel::WARN) { $this->AddLog(__FUNCTION__, sprintf("WARN :: Cannot save Variable '%s' with value '%s' [parentId: %s | varIdent: %s | varId: %s | type: %s]", $varName, print_r($value), $parentId, $varIdent, $varId, gettype($value)), 0); }	
+                if($this->logLevel >= LogLevel::WARN) { $this->AddLog(__FUNCTION__, sprintf("WARN :: Cannot save Variable '%s' with value '%s' [parentId: %s | varIdent: %s | varId: %s | type: %s]", $varName, print_r($value), $parentId, $varIdent, $varId, gettype($value))); }	
             }
         }
         return $varId;
@@ -192,7 +192,7 @@ trait PG_COMMON {
         if($varId === false) {
 
             if($this->logLevel >= LogLevel::TRACE) { $this->AddLog(__FUNCTION__, 
-                sprintf("Create IPS-Variable :: Type: %d | Ident: %s | Profile: %s | Name: %s", $varType, $varIdent, $varProfile, $varName), 0); }	
+                sprintf("Create IPS-Variable :: Type: %d | Ident: %s | Profile: %s | Name: %s", $varType, $varIdent, $varProfile, $varName)); }	
 
             $varId = IPS_CreateVariable($varType);
             IPS_SetParent($varId, $parentId);
@@ -209,7 +209,7 @@ trait PG_COMMON {
 
 
     protected function LoadFileContents($fileName) {
-        if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, sprintf("Load File Content form '%s'", $fileName), 0); }	
+        if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, sprintf("Load File Content form '%s'", $fileName)); }	
         return file_get_contents($fileName);
     }
 

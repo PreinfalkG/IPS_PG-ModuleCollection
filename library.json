@@ -1,12 +1,12 @@
 {
     "id": "{E18A2685-7042-4A84-B14B-6E4A887B8898}",
-    "name": "PG Modul Collection",
+    "name": "IPS_PG Modul Collection",
     "author": "PreinfalkG",
     "url": "",
     "compatibility": {
         "version": "6.4"
     },
-    "version": "0.2",
-    "build": 20231028,
-    "date": 1698472601
+    "version": "0.22",
+    "build": 20231103,
+    "date": 1699026641
 }
