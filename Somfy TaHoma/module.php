@@ -199,7 +199,7 @@ class SomfyTaHoma extends IPSModule	{
 				//if($this->logLevel >= LogLevel::DEBUG) { $this->AddLog(__FUNCTION__, sprintf(" %s - %s\r\n", $categiryIdent, $dummyModulIdent)); }
 
 
-				$parentRootId = IPS_GetParent($InstanceID);
+				$parentRootId = IPS_GetParent($this->InstanceID);
 
 				switch($controllableName) {
 
