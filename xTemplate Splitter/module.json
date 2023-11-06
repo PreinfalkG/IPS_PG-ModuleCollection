@@ -1,0 +1,11 @@
+{
+    "id": "{52BEE200-B86B-94C5-D6E8-300706FA053C}",
+    "name": "TemplateSplitter",
+    "type": 2,
+    "vendor": "PreinfalkG",
+    "aliases": ["PG - Template Splitter"],
+    "parentRequirements": ["{79827379-F36E-4ADA-8A95-5F8D1DC92FA9}"],
+    "childRequirements": ["{DAAABEF0-127D-FF0A-6A74-38F9459D237B}"],
+    "implemented": ["{018EF6B5-AB94-40C6-AA53-46943E824ACF}", "{71DCBA97-31AB-A772-BCC3-4B24CF96723B}"],
+    "prefix": "TemplateS"
+}

@@ -1,0 +1,11 @@
+{
+	"id": "{2A331EC3-5B68-E6BC-CBA7-E4E0BE0E168F}",
+	"name": "Template",
+	"type": 3,
+	"vendor": "PreinfalkG",
+	"aliases": ["PG - Template Device"],
+	"parentRequirements": ["{71DCBA97-31AB-A772-BCC3-4B24CF96723B}"],
+	"childRequirements": [],
+	"implemented": ["{DAAABEF0-127D-FF0A-6A74-38F9459D237B}"],
+	"prefix": "Template"
+}
