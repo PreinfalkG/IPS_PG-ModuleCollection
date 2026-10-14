@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/libs/Drivers.php';
 
-class TimeSwitch extends IPSModule
+class TimeSwitchController extends IPSModule
 {
     private const DRIVERS = [
         'hm'      => TimeSwitchDriverHomeMatic::class,
