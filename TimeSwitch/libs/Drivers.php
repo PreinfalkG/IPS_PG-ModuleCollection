@@ -34,8 +34,8 @@ final class TimeSwitchDriverHomeMatic implements TimeSwitchDriver
             return false;
         }
         $instance = IPS_GetParent($switchVar);
-
-        if($seconds < 999900) {
+        // Erst ON_TIME schreiben, dann einschalten. ON_TIME = 0 bedeutet: kein Timer (Dauer-EIN).
+        if($seconds > 0) {
             if (!@HM_WriteValueFloat($instance, 'ON_TIME', (float) $seconds)) {
                 //$this->SendDebug(__METHOD__, sprintf("ON HM ON_TIME %d sec :: [%d] - %s", $seconds, $switchVar, IPS_GetLocation($switchVar)), 0);
                 return false;
