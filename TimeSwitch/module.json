@@ -1,8 +1,8 @@
 {
     "id": "{B0BD3AB4-D2B8-4611-BE42-71980A559EF3}",
-    "name": "Time Switch",
+    "name": "Time Switch Controller",
     "type": 3,
-    "vendor": "",
+    "vendor": "PreinfalkG",
     "aliases": [],
     "parentRequirements": [],
     "childRequirements": [],
