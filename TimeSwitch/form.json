@@ -1,0 +1,63 @@
+{
+    "elements": [
+        {
+            "type": "Label",
+            "caption": "Jede Zeile verbindet eine selbst angelegte Integer-Variable 'Time Switch' (Sekunden) mit der Schaltvariable des Aktors. Die Aktion der Time-Switch-Variable wird automatisch auf diese Instanz gesetzt."
+        },
+        {
+            "type": "NumberSpinner",
+            "name": "PermanentValue",
+            "caption": "Wert für Dauer-EIN (Sekunden, ohne Timer)",
+            "minimum": 1
+        },
+        {
+            "type": "List",
+            "name": "Devices",
+            "caption": "Zuordnung",
+            "add": true,
+            "delete": true,
+            "rowCount": 12,
+            "columns": [
+                {
+                    "caption": "Time Switch (Integer-Variable)",
+                    "name": "TimeVar",
+                    "width": "320px",
+                    "add": 0,
+                    "edit": {
+                        "type": "SelectVariable"
+                    }
+                },
+                {
+                    "caption": "Schaltvariable (STATE)",
+                    "name": "SwitchVar",
+                    "width": "320px",
+                    "add": 0,
+                    "edit": {
+                        "type": "SelectVariable"
+                    }
+                },
+                {
+                    "caption": "Treiber",
+                    "name": "Driver",
+                    "width": "260px",
+                    "add": "generic",
+                    "edit": {
+                        "type": "Select",
+                        "options": [
+                            {
+                                "caption": "HomeMatic / HmIP (natives ON_TIME)",
+                                "value": "hm"
+                            },
+                            {
+                                "caption": "Generisch (IP-Symcon schaltet aus)",
+                                "value": "generic"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "actions": [],
+    "status": []
+}

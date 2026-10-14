@@ -1,0 +1,12 @@
+{
+    "id": "{B0BD3AB4-D2B8-4611-BE42-71980A559EF3}",
+    "name": "Time Switch",
+    "type": 3,
+    "vendor": "",
+    "aliases": [],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "TSCT",
+    "url": ""
+}
