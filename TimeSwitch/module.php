@@ -3,9 +3,14 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/libs/Drivers.php';
+require_once __DIR__ . '/libs/ExportImport.php';
+
 
 class TimeSwitchController extends IPSModule
 {
+
+    use TimeSwitchExportImport; 
+
     private const DRIVERS = [
         'hm'      => TimeSwitchDriverHomeMatic::class,
         'generic' => TimeSwitchDriverGeneric::class,
@@ -319,4 +324,9 @@ class TimeSwitchController extends IPSModule
         }
         
     }
+
+    public function Export(): string { return $this->exportConfig(); }
+    public function Import(string $Json, bool $Merge): void { $this->importConfig($Json, $Merge); }
+
+
 }

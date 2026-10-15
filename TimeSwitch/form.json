@@ -21,7 +21,7 @@
                 {
                     "caption": "Time Switch (Integer-Variable)",
                     "name": "TimeVar",
-                    "width": "320px",
+                    "width": "650px",
                     "add": 0,
                     "edit": {
                         "type": "SelectVariable"
@@ -30,7 +30,7 @@
                 {
                     "caption": "Schaltvariable (STATE)",
                     "name": "SwitchVar",
-                    "width": "320px",
+                    "width": "650px",
                     "add": 0,
                     "edit": {
                         "type": "SelectVariable"
@@ -39,7 +39,7 @@
                 {
                     "caption": "Treiber",
                     "name": "Driver",
-                    "width": "260px",
+                    "width": "340px",
                     "add": "generic",
                     "edit": {
                         "type": "Select",
@@ -58,6 +58,51 @@
             ]
         }
     ],
-    "actions": [],
-    "status": []
+ "actions": [
+    {
+      "type": "Label",
+      "caption": "Export / Import der Zuordnung (JSON, Stand der zuletzt übernommenen Konfiguration)"
+    },
+    {
+      "type": "ValidationTextBox",
+      "name": "ExchangeText",
+      "caption": "JSON",
+      "multiline": true,
+      "value": ""
+    },
+    {
+      "type": "CheckBox",
+      "name": "ImportMerge",
+      "caption": "Import mit vorhandenen Zeilen zusammenführen (sonst ersetzen)",
+      "value": false
+    },
+    {
+      "type": "RowLayout",
+      "items": [
+        {
+          "type": "Button",
+          "caption": "Export",
+          "onClick": "TSCT_Export($id);"
+        },
+        {
+            "type": "Button",
+            "caption": "Export als Datei",
+            "download": "TimeSwitch.json",
+            "onClick": "echo 'data:application/json;base64,' . base64_encode(TSCT_Export($id));"
+        },        
+        {
+          "type": "Button",
+          "confirm": "Der JSON-Inhalt wird in die Tabelle geladen und ersetzt sie bzw. wird mit ihr zusammengeführt (je nach Checkbox). Fortfahren?",
+          "caption": "Import",
+          "onClick": "TSCT_Import($id, $ExchangeText, $ImportMerge);"
+        }
+      ]
+    },
+    {
+      "type": "Label",
+      "name": "ExchangeResult",
+      "caption": ""
+    }
+  ],
+  "status": []
 }
