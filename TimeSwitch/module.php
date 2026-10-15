@@ -210,28 +210,33 @@ class TimeSwitchController extends IPSModule
             IPS_CreateVariableProfile(self::PROFILE, 1);
             IPS_SetVariableProfileValues(self::PROFILE, 0, 0, 0);
         }
+
+        // Bestehende Associations entfernen (leere Caption = löschen)
         foreach (IPS_GetVariableProfile(self::PROFILE)['Associations'] as $association) {
             IPS_SetVariableProfileAssociation(self::PROFILE, $association['Value'], '', '', -1);
         }
+
+        // Wert => [Caption, Icon, Farbe (0xRRGGBB oder -1 für keine)]
         $associations = [
-            0                       => 'Aus',
-            30                      => '30 Sec',
-            60                      => '1 Min',
-            180                     => '3 Min',
-            300                     => '5 Min',
-            600                     => '10 Min',
-            1200                    => '20 Min',
-            1800                    => '30 Min',
-            3600                    => '1 Std',
-            5400                    => '1,5 Std',
-            7200                    => '2 Std',
-            10800                   => '3 Std',
-            18000                   => '5 Std',   
-            36000                   => '10 Std',   
-            $this->permanentValue() => 'Dauer-EIN',
+            0                       => ['Aus',       'light-switch-off',    0xFF0000],
+            30                      => ['30 Sec',    'timer',               0xC07EEC],
+            60                      => ['1 Min',     'timer',               0x00FFDD],
+            180                     => ['3 Min',     'timer',               0x00FFDD],
+            300                     => ['5 Min',     'timer',               0x00FFDD],
+            600                     => ['10 Min',    'timer',               0x00FFDD],
+            1200                    => ['20 Min',    'timer',               0x00FFDD],
+            1800                    => ['30 Min',    'timer',               0x00FFDD],
+            3600                    => ['1 Std',     'timer',               0x00FFDD],
+            5400                    => ['1,5 Std',   'Clock',               0x00FFDD],
+            7200                    => ['2 Std',     'timer',               0x00FFDD],
+            10800                   => ['3 Std',     'timer',               0x00FFDD],
+            18000                   => ['5 Std',     'timer',               0x00FFDD],
+            36000                   => ['10 Std',    'timer',               0x00FFDD],
+            $this->permanentValue() => ['Dauer-EIN', 'light-switch-on',     0x00FF00],
         ];
-        foreach ($associations as $value => $caption) {
-            IPS_SetVariableProfileAssociation(self::PROFILE, $value, $caption, '', -1);
+
+        foreach ($associations as $value => [$caption, $icon, $color]) {
+            IPS_SetVariableProfileAssociation(self::PROFILE, $value, $caption, $icon, $color);
         }
     }
 
