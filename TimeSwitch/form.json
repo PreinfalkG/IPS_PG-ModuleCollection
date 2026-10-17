@@ -21,7 +21,7 @@
                 {
                     "caption": "Time Switch (Integer-Variable)",
                     "name": "TimeVar",
-                    "width": "650px",
+                    "width": "800px",
                     "add": 0,
                     "edit": {
                         "type": "SelectVariable"
@@ -30,7 +30,7 @@
                 {
                     "caption": "Schaltvariable (STATE)",
                     "name": "SwitchVar",
-                    "width": "650px",
+                    "width": "800px",
                     "add": 0,
                     "edit": {
                         "type": "SelectVariable"
@@ -68,6 +68,7 @@
       "name": "ExchangeText",
       "caption": "JSON",
       "multiline": true,
+      "width": "80%",
       "value": ""
     },
     {

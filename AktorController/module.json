@@ -1,0 +1,12 @@
+{
+    "id": "{9A389C1B-323C-4972-82EA-0E6EF0663231}",
+    "name": "Aktor Controller",
+    "type": 3,
+    "vendor": "PreinfalkG",
+    "aliases": ["Aktor Controller with Time Switch"],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "AKTC",
+    "url": ""
+}

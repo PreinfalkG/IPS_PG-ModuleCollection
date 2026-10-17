@@ -1,0 +1,898 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/libs/Drivers.php';
+require_once __DIR__ . '/libs/ExportImport.php';
+
+/**
+ * Aktor Controller
+ *
+ * Hauptfunktionen:
+ *  - Aktoren normal EIN/AUS schalten (SwitchOn / SwitchOff), einheitlich über Treiber
+ *  - Time Switch: Integer-Variable pro Aktor (Sekunden), Restlaufzeit, Modul-Timer (auch für HomeMatic ON_TIME)
+ *  - Betriebszeit pro Aktor (TotalOnSeconds)
+ *
+ * Schlüssel einer Zeile ist die Schaltvariable (SwitchVar). Die Time-Switch-Variable ist optional.
+ */
+class AktorController extends IPSModule
+{
+    use AktorControllerExportImport;
+
+    private const DRIVERS = [
+        'hm'      => AktorDriverHomeMatic::class,
+        'generic' => AktorDriverGeneric::class,
+    ];
+
+    private const PROFILE_DURATION = 'AKTC.Duration';
+    private const PROFILE_TOTAL = 'AKTC.TotalSeconds';
+    private const DEFAULT_PERMANENT = 999999;
+    private const VERIFY_AFTER_COMMAND = 10;          // Sekunden bis zur Kontrolle nach einem AUS-Befehl / zwischen Wiederholungen
+    private const STAT_IDENT_PREFIX = 'TotalOnSeconds_';
+    private const TIME_IDENT_PREFIX = 'TimeSwitch_'; 
+
+    public function Create()
+    {
+        parent::Create();
+        $this->RegisterPropertyString('Devices', '[]');
+        $this->RegisterPropertyInteger('PermanentValue', self::DEFAULT_PERMANENT);
+        $this->RegisterPropertyInteger('VerifyDelay', 10);
+        $this->RegisterPropertyInteger('VerifyRetries', 2);
+        $this->RegisterPropertyInteger('RemainingUpdate', 1);
+        $this->RegisterPropertyInteger('StatsInterval', 60);
+
+        // Laufzeitdaten, alle nach SwitchVar indiziert
+        $this->RegisterAttributeString('Timers', '{}');      // {sw: {End, Mode: sw|native, Seconds}}
+        $this->RegisterAttributeString('Verify', '{}');      // {sw: {Check, Retry, Reason}}  Kontrolle "ist wirklich AUS"
+        $this->RegisterAttributeString('OnSince', '{}');     // {sw: Zeitstempel}              Betriebszeit-Checkpoint
+        $this->RegisterAttributeString('ManagedVars', '[]'); // Time-Switch-Variablen mit gesetzter Custom Action
+
+        $this->RegisterTimer('Tick', 0, 'AKTC_Tick($_IPS[\'TARGET\']);');
+        $this->RegisterTimer('StatsTick', 0, 'AKTC_StatsTick($_IPS[\'TARGET\']);');
+    }
+
+    public function ApplyChanges()
+    {
+        parent::ApplyChanges();
+
+        foreach ($this->GetMessageList() as $senderID => $messages) {
+            foreach ($messages as $message) {
+                $this->UnregisterMessage($senderID, $message);
+            }
+        }
+
+        $this->ensureProfiles();
+
+        $this->RegisterVariableInteger('activTimer', 'Aktive Timer', '', 100);
+        $this->RegisterVariableInteger('tickCnt', 'Tick Cnt', '', 900);
+
+        // Proxy-Skript: Custom Actions akzeptieren nur Skripte, daher Weiterleitung an die Instanz
+        $scriptID = $this->RegisterScript(
+            'ActionProxy',
+            'Action Proxy',
+            '<?php IPS_RequestAction(' . $this->InstanceID . ', $_IPS[\'VARIABLE\'], $_IPS[\'VALUE\']);'
+        );
+        IPS_SetHidden($scriptID, true);
+
+        $devices = $this->getDevices(true);
+
+        // Betriebszeit-Variablen anlegen (gleiche Ebene wie die Time-Switch-Variable, sonst wie die Schaltvariable)
+        $created = false;
+        foreach ($devices as $device) {
+            if ($device['Count'] && $device['StatVar'] === 0) {
+                $this->createStatVar($device);
+                $created = true;
+            }
+        }
+        if ($created) {
+            $devices = $this->getDevices();
+        }
+
+        // Aus der Liste entfernte Time-Switch-Variablen: Custom Action zurücksetzen, sofern sie auf unser Skript zeigt
+        $currentTimeVars = [];
+        foreach ($devices as $device) {
+            if ($device['TimeVar'] > 0) {
+                $currentTimeVars[] = $device['TimeVar'];
+            }
+        }
+        foreach (json_decode($this->ReadAttributeString('ManagedVars'), true) ?: [] as $oldVar) {
+            $oldVar = (int) $oldVar;
+            if (!in_array($oldVar, $currentTimeVars, true) && IPS_VariableExists($oldVar)
+                && IPS_GetVariable($oldVar)['VariableCustomAction'] === $scriptID) {
+                IPS_SetVariableCustomAction($oldVar, 0);
+            }
+            // Vom Modul vergebenen Ident wieder freigeben
+            if (!in_array($oldVar, $currentTimeVars, true) && IPS_VariableExists($oldVar)
+                && strpos(IPS_GetObject($oldVar)['ObjectIdent'], self::TIME_IDENT_PREFIX) === 0) {
+                @IPS_SetIdent($oldVar, '');
+            }
+        }
+        $this->WriteAttributeString('ManagedVars', json_encode($currentTimeVars));
+
+        foreach ($devices as $device) {
+            if ($device['TimeVar'] > 0) {
+                $timeVar = $device['TimeVar'];
+                IPS_SetVariableCustomAction($timeVar, $scriptID);
+                $this->ensureTimeIdent($device);  
+                // Profil nur setzen, wenn die Variable noch keines hat
+                $var = IPS_GetVariable($timeVar);
+                if ($var['VariableProfile'] === '' && $var['VariableCustomProfile'] === '') {
+                    IPS_SetVariableCustomProfile($timeVar, self::PROFILE_DURATION);
+                }
+            }
+            $this->RegisterMessage($device['SwitchVar'], VM_UPDATE);
+        }
+
+        $this->reconcile($devices);
+        $this->refreshRunState(true);
+        $this->SetStatus(102);
+    }
+
+    // ------------------------------------------------------------------
+    // Aktion der Time-Switch-Variable
+    // ------------------------------------------------------------------
+
+    /** Wird über die Aktion der Time-Switch-Variable aufgerufen. */
+    public function RequestAction($Ident, $Value)
+    {
+        $this->SendDebug(__FUNCTION__, 'Ident=' . json_encode($Ident) . ' Value=' . json_encode($Value), 0);
+
+        $switchVar = $this->resolveSwitchVar($Ident);
+        if ($switchVar === null) {
+            $this->LogMessage('RequestAction: keine Zuordnung für Ident ' . json_encode($Ident), KL_WARNING);
+            return;
+        }
+
+        $seconds = max(0, (int) $Value);
+        if ($seconds === 0) {
+            $this->SwitchOff($switchVar);
+        } elseif ($seconds === $this->permanentValue()) {
+            $this->SwitchOn($switchVar);
+        } else {
+            $this->SwitchTimed($switchVar, $seconds);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Öffentliche Funktionen (AKTC_...)
+    // ------------------------------------------------------------------
+
+    /** AKTC_SwitchOn($id, $SwitchVar) – EIN ohne Zeit (Dauer-EIN). */
+    public function SwitchOn(int $SwitchVar): bool
+    {
+        $device = $this->getDevices()[$SwitchVar] ?? null;
+        if ($device === null) {
+            $this->LogMessage('SwitchOn: Schaltvariable ' . $SwitchVar . ' ist nicht konfiguriert', KL_WARNING);
+            return false;
+        }
+        return $this->switchOnInternal($device, 0);
+    }
+
+    /** AKTC_SwitchTimed($id, $SwitchVar, $Seconds) – EIN für $Seconds Sekunden. */
+    public function SwitchTimed(int $SwitchVar, int $Seconds): bool
+    {
+        $device = $this->getDevices()[$SwitchVar] ?? null;
+        if ($device === null) {
+            $this->LogMessage('SwitchTimed: Schaltvariable ' . $SwitchVar . ' ist nicht konfiguriert', KL_WARNING);
+            return false;
+        }
+        if ($Seconds <= 0) {
+            return false;
+        }
+        // Der Dauer-EIN-Wert der Time-Switch-Variable ist nur ein Anzeigewert, kein Timer
+        return $this->switchOnInternal($device, $Seconds === $this->permanentValue() ? 0 : $Seconds);
+    }
+
+    /** AKTC_SwitchOff($id, $SwitchVar) – AUS, beendet einen laufenden Timer. */
+    public function SwitchOff(int $SwitchVar): bool
+    {
+        $device = $this->getDevices()[$SwitchVar] ?? null;
+        if ($device === null) {
+            $this->LogMessage('SwitchOff: Schaltvariable ' . $SwitchVar . ' ist nicht konfiguriert', KL_WARNING);
+            return false;
+        }
+        return $this->switchOffInternal($device, 'Befehl');
+    }
+
+    /** Konfigurierte und gültige Zeilen, indiziert nach SwitchVar. */
+    public function GetConfiguredDevices(): array
+    {
+        return $this->getDevices();
+    }
+
+    /**
+     * AKTC_GetActivTimer($id, $asText) – alle laufenden Timer (Modul-Timer und HomeMatic ON_TIME)
+     * plus abgelaufene, die noch auf die Kontrolle "wirklich AUS" warten.
+     */
+    public function GetActivTimer(bool $asText)
+    {
+        $now = time();
+        $list = [];
+        foreach ($this->readTable('Timers') as $sw => $timer) {
+            $list[] = [
+                'SwitchVar' => $sw,
+                'Name'      => IPS_VariableExists($sw) ? IPS_GetLocation($sw) : '?',
+                'Mode'      => $timer['Mode'],
+                'Phase'     => 'run',
+                'Seconds'   => (int) $timer['Seconds'],
+                'End'       => (int) $timer['End'],
+                'Remaining' => max(0, (int) $timer['End'] - $now),
+            ];
+        }
+        foreach ($this->readTable('Verify') as $sw => $verify) {
+            $list[] = [
+                'SwitchVar' => $sw,
+                'Name'      => IPS_VariableExists($sw) ? IPS_GetLocation($sw) : '?',
+                'Mode'      => (string) $verify['Reason'],
+                'Phase'     => 'verify',
+                'Seconds'   => 0,
+                'End'       => (int) $verify['Check'],
+                'Remaining' => 0,
+                'Retry'     => (int) $verify['Retry'],
+            ];
+        }
+        if (!$asText) {
+            return $list;
+        }
+
+        $text = sprintf("Aktive Timer: %d\n", count($list));
+        foreach ($list as $entry) {
+            if ($entry['Phase'] === 'run') {
+                $text .= sprintf("[%d] %s | %s | noch %s (Ende %s)\n", $entry['SwitchVar'], $entry['Name'], $entry['Mode'] === 'native' ? 'HM ON_TIME' : 'Modul-Timer', $this->formatDuration($entry['Remaining']), date('H:i:s', $entry['End']));
+            } else {
+                $text .= sprintf("[%d] %s | Kontrolle AUS in %d s (Versuch %d/%d, Grund: %s)\n", $entry['SwitchVar'], $entry['Name'], max(0, $entry['End'] - $now), $entry['Retry'], $this->ReadPropertyInteger('VerifyRetries'), $entry['Mode']);
+            }
+        }
+        return $text;
+    }
+
+    /** AKTC_GetActiveDevices($id, $asText) – alle gerade eingeschalteten Aktoren (auch Dauer-EIN / extern). */
+    public function GetActiveDevices(bool $asText)
+    {
+        $now = time();
+        $timers = $this->readTable('Timers');
+        $list = [];
+        foreach ($this->getDevices() as $sw => $device) {
+            if (!(bool) GetValue($sw)) {
+                continue;
+            }
+            $list[] = [
+                'SwitchVar' => $sw,
+                'Name'      => IPS_GetLocation($sw),
+                'Mode'      => isset($timers[$sw]) ? 'timer' : 'dauer',
+                'Remaining' => isset($timers[$sw]) ? max(0, (int) $timers[$sw]['End'] - $now) : 0,
+            ];
+        }
+        if (!$asText) {
+            return $list;
+        }
+        $text = sprintf("Eingeschaltete Aktoren: %d\n", count($list));
+        foreach ($list as $entry) {
+            $text .= sprintf("[%d] %s | %s\n", $entry['SwitchVar'], $entry['Name'], $entry['Mode'] === 'timer' ? 'noch ' . $this->formatDuration($entry['Remaining']) : 'Dauer-EIN / extern');
+        }
+        return $text;
+    }
+
+    /** AKTC_GetTotalOnSeconds($id, $SwitchVar) – gesamte Einschaltdauer inklusive des aktuell laufenden Abschnitts. */
+    public function GetTotalOnSeconds(int $SwitchVar): int
+    {
+        $device = $this->getDevices()[$SwitchVar] ?? null;
+        if ($device === null || $device['StatVar'] === 0) {
+            return 0;
+        }
+        $total = (int) GetValue($device['StatVar']);
+        $since = $this->readTable('OnSince')[$SwitchVar] ?? null;
+        if ($since !== null) {
+            $total += max(0, time() - (int) $since);
+        }
+        return $total;
+    }
+
+    /** AKTC_ResetTotalOnSeconds($id, $SwitchVar) – Betriebszeit auf 0 (z. B. nach Leuchtmitteltausch). */
+    public function ResetTotalOnSeconds(int $SwitchVar): bool
+    {
+        $device = $this->getDevices()[$SwitchVar] ?? null;
+        if ($device === null || $device['StatVar'] === 0) {
+            return false;
+        }
+        SetValue($device['StatVar'], 0);
+        if (isset($this->readTable('OnSince')[$SwitchVar])) {
+            $this->mutate('OnSince', $SwitchVar, time());
+        }
+        $this->SendDebug(__FUNCTION__, sprintf('Betriebszeit zurückgesetzt :: [%d] %s', $SwitchVar, IPS_GetLocation($SwitchVar)), 0);
+        return true;
+    }
+
+    public function Export(): string
+    {
+        return $this->exportConfig();
+    }
+
+    public function Import(string $Json, bool $Merge): void
+    {
+        $this->importConfig($Json, $Merge);
+    }
+
+    // ------------------------------------------------------------------
+    // Timer
+    // ------------------------------------------------------------------
+
+    /** Sekundentakt, nur aktiv solange Timer oder Kontrollen anstehen. */
+    public function Tick()
+    {
+        $tickCnt = $this->GetIDForIdent('tickCnt');
+        SetValue($tickCnt, (int) GetValue($tickCnt) + 1);
+
+        $devices = $this->getDevices();
+        $now = time();
+
+        foreach ($this->readTable('Timers') as $sw => $timer) {
+            if (!isset($devices[$sw])) {
+                $this->mutate('Timers', $sw, null);
+                continue;
+            }
+            $remaining = (int) $timer['End'] - $now;
+            if ($remaining > 0) {
+                $this->showRemaining($devices[$sw], $remaining);
+                continue;
+            }
+            // Zwischenzeitlich (z. B. durch OFF-Meldung) schon entfernt?
+            $current = $this->readTable('Timers')[$sw] ?? null;
+            if ($current !== null) {
+                $this->expire($devices[$sw], $current);
+            }
+        }
+
+        foreach ($this->readTable('Verify') as $sw => $verify) {
+            if (!isset($devices[$sw])) {
+                $this->mutate('Verify', $sw, null);
+                continue;
+            }
+            if ((int) $verify['Check'] > $now) {
+                continue;
+            }
+            $current = $this->readTable('Verify')[$sw] ?? null;
+            if ($current !== null) {
+                $this->verify($devices[$sw], $current);
+            }
+        }
+    }
+
+    /** Betriebszeit-Checkpoint, nur aktiv solange mindestens ein Aktor EIN ist. */
+    public function StatsTick()
+    {
+        $devices = $this->getDevices();
+        $now = time();
+        foreach ($this->readTable('OnSince') as $sw => $since) {
+            if (!isset($devices[$sw]) || $devices[$sw]['StatVar'] === 0) {
+                $this->mutate('OnSince', $sw, null);
+                continue;
+            }
+            $seconds = $now - (int) $since;
+            if ($seconds <= 0) {
+                continue;
+            }
+            $this->addOnSeconds($devices[$sw], $seconds);
+            $this->mutate('OnSince', $sw, $now);
+        }
+    }
+
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    {
+        if ($Message !== VM_UPDATE) {
+            return;
+        }
+        $device = $this->getDevices()[$SenderID] ?? null;
+        if ($device === null) {
+            return;
+        }
+        $on = (bool) $Data[0];
+        $this->trackOnTime($device, $on);
+        $this->syncState($device, $on);
+    }
+
+    // ------------------------------------------------------------------
+    // Schalten
+    // ------------------------------------------------------------------
+
+    /** $seconds = 0: Dauer-EIN ohne Zeit, sonst EIN mit Zeit. */
+    private function switchOnInternal(array $device, int $seconds): bool
+    {
+        $sw = $device['SwitchVar'];
+        $timeVar = $device['TimeVar'];
+        $driver = $this->driver($device['Driver']);
+
+        $this->SendDebug(__FUNCTION__, sprintf('%s :: [%d] %s', $seconds > 0 ? $seconds . ' s' : 'Dauer-EIN', $sw, IPS_GetLocation($sw)), 0);
+
+        // Anzeigewert zuerst setzen, damit die VM_UPDATE-Meldung des Aktors nicht als "extern eingeschaltet" gedeutet wird
+        $old = null;
+        if ($timeVar > 0) {
+            $old = (int) GetValue($timeVar);
+            $this->setIfChanged($timeVar, $seconds > 0 ? $seconds : $this->permanentValue());
+        }
+
+        $ok = $seconds > 0 ? $driver->onTimed($sw, $seconds) : $driver->on($sw);
+        if (!$ok) {
+            if ($timeVar > 0 && $old !== null) {
+                $this->setIfChanged($timeVar, $old);
+            }
+            $this->LogMessage(sprintf('Einschalten fehlgeschlagen :: [%d] %s (Treiber %s)', $sw, IPS_GetLocation($sw), $device['Driver']), KL_ERROR);
+            return false;
+        }
+
+        $this->mutate('Verify', $sw, null);
+        if ($seconds > 0) {
+            $this->mutate('Timers', $sw, [
+                'End'     => time() + $seconds,
+                'Mode'    => $driver->isNative() ? 'native' : 'sw',
+                'Seconds' => $seconds,
+            ]);
+        } else {
+            $this->mutate('Timers', $sw, null);
+        }
+        return true;
+    }
+
+    private function switchOffInternal(array $device, string $reason): bool
+    {
+        $sw = $device['SwitchVar'];
+        $driver = $this->driver($device['Driver']);
+
+        $this->SendDebug(__FUNCTION__, sprintf('Grund=%s :: [%d] %s', $reason, $sw, IPS_GetLocation($sw)), 0);
+
+        $ok = $driver->off($sw);
+        $this->mutate('Timers', $sw, null);
+        if ($ok) {
+            if ($device['TimeVar'] > 0) {
+                $this->setIfChanged($device['TimeVar'], 0);
+            }
+        } else {
+            $this->LogMessage(sprintf('Ausschalten fehlgeschlagen :: [%d] %s (Grund %s), Wiederholung folgt', $sw, IPS_GetLocation($sw), $reason), KL_WARNING);
+        }
+        // Abschlusskontrolle: ist der Aktor wirklich aus? (Bei Fehler wiederholt sie den Befehl.)
+        $this->mutate('Verify', $sw, ['Check' => time() + self::VERIFY_AFTER_COMMAND, 'Retry' => 0, 'Reason' => $reason]);
+        return $ok;
+    }
+
+    /** Timer abgelaufen. */
+    private function expire(array $device, array $timer): void
+    {
+        $sw = $device['SwitchVar'];
+        if ($timer['Mode'] === 'native') {
+            // Das Gerät beendet die Zeit selbst: nicht schalten, Karenz abwarten, dann Zustand prüfen
+            $delay = max(1, $this->ReadPropertyInteger('VerifyDelay'));
+            $this->SendDebug(__FUNCTION__, sprintf('Native Zeit abgelaufen, warte %d s auf AUS-Meldung :: [%d] %s', $delay, $sw, IPS_GetLocation($sw)), 0);
+            $this->mutate('Timers', $sw, null);
+            $this->mutate('Verify', $sw, ['Check' => time() + $delay, 'Retry' => 0, 'Reason' => 'native']);
+            if ($device['TimeVar'] > 0) {
+                $this->setIfChanged($device['TimeVar'], 0);
+            }
+            return;
+        }
+        $this->SendDebug(__FUNCTION__, sprintf('Modul-Timer abgelaufen, schalte AUS :: [%d] %s', $sw, IPS_GetLocation($sw)), 0);
+        $this->switchOffInternal($device, 'Timer');
+    }
+
+    /** Kontrolle, ob der Aktor nach dem Ablauf / AUS-Befehl wirklich aus ist. */
+    private function verify(array $device, array $verify): void
+    {
+        $sw = $device['SwitchVar'];
+
+        if (!(bool) GetValue($sw)) {
+            $this->SendDebug(__FUNCTION__, sprintf('AUS bestätigt :: [%d] %s', $sw, IPS_GetLocation($sw)), 0);
+            $this->mutate('Verify', $sw, null);
+            return;
+        }
+
+        $unreach = $this->isUnreachable($sw) ? ' (Gerät meldet UNREACH)' : '';
+        $retry = (int) $verify['Retry'];
+        if ($retry >= $this->ReadPropertyInteger('VerifyRetries')) {
+            $this->LogMessage(sprintf('Aktor [%d] %s ist trotz AUS-Anforderung weiterhin EIN, gebe nach %d Versuchen auf%s', $sw, IPS_GetLocation($sw), $retry, $unreach), KL_ERROR);
+            $this->mutate('Verify', $sw, null);
+            if ($device['TimeVar'] > 0) {
+                $this->setIfChanged($device['TimeVar'], $this->permanentValue()); // Ist-Zustand anzeigen
+            }
+            return;
+        }
+
+        $this->SendDebug(__FUNCTION__, sprintf('Noch EIN, AUS-Versuch %d/%d%s :: [%d] %s', $retry + 1, $this->ReadPropertyInteger('VerifyRetries'), $unreach, $sw, IPS_GetLocation($sw)), 0);
+        $this->driver($device['Driver'])->off($sw);
+        $this->mutate('Verify', $sw, ['Check' => time() + self::VERIFY_AFTER_COMMAND, 'Retry' => $retry + 1, 'Reason' => (string) $verify['Reason']]);
+    }
+
+    /** Restlaufzeit in die Time-Switch-Variable schreiben (nur wenn sich der Wert um mindestens das Intervall unterscheidet). */
+    private function showRemaining(array $device, int $remaining): void
+    {
+        $interval = $this->ReadPropertyInteger('RemainingUpdate');
+        if ($device['TimeVar'] === 0 || $interval <= 0) {
+            return;
+        }
+        $shown = (int) GetValue($device['TimeVar']);
+        if (abs($shown - $remaining) >= $interval) {
+            SetValue($device['TimeVar'], $remaining);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Zustandsabgleich (VM_UPDATE der Schaltvariable)
+    // ------------------------------------------------------------------
+
+    /** Time-Switch-Variable, Timer und Kontrolle mit dem Ist-Zustand des Aktors abgleichen. */
+    private function syncState(array $device, bool $on): void
+    {
+        $sw = $device['SwitchVar'];
+        $timers = $this->readTable('Timers');
+        $verify = $this->readTable('Verify');
+
+        if ($on) {
+            // Extern eingeschaltet (Taster, App, anderes Skript): als Dauer-EIN anzeigen.
+            // Nicht während Timer oder Kontrolle: dann ist das Einschalten bekannt bzw. die Zeit gerade abgelaufen.
+            if ($device['TimeVar'] > 0 && (int) GetValue($device['TimeVar']) === 0 && !isset($timers[$sw]) && !isset($verify[$sw])) {
+                $this->SendDebug(__FUNCTION__, sprintf('Extern EIN, zeige Dauer-EIN :: [%d] %s', $sw, IPS_GetLocation($sw)), 0);
+                SetValue($device['TimeVar'], $this->permanentValue());
+            }
+            return;
+        }
+
+        // Aus (Ablauf, manuell, Taster): Anzeige zurücksetzen, Timer verwerfen, Kontrolle ist erfüllt
+        if ($device['TimeVar'] > 0 && (int) GetValue($device['TimeVar']) > 0) {
+            SetValue($device['TimeVar'], 0);
+        }
+        if (isset($timers[$sw])) {
+            $this->SendDebug(__FUNCTION__, sprintf('AUS gemeldet, Timer verworfen :: [%d] %s', $sw, IPS_GetLocation($sw)), 0);
+            $this->mutate('Timers', $sw, null);
+        }
+        if (isset($verify[$sw])) {
+            $this->SendDebug(__FUNCTION__, sprintf('AUS bestätigt durch Meldung des Aktors :: [%d] %s', $sw, IPS_GetLocation($sw)), 0);
+            $this->mutate('Verify', $sw, null);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Betriebszeit
+    // ------------------------------------------------------------------
+
+    private function trackOnTime(array $device, bool $on): void
+    {
+        if ($device['StatVar'] === 0) {
+            return;
+        }
+        $sw = $device['SwitchVar'];
+        $since = $this->readTable('OnSince')[$sw] ?? null;
+        $now = time();
+        if ($on && $since === null) {
+            $this->mutate('OnSince', $sw, $now);
+        } elseif (!$on && $since !== null) {
+            $this->addOnSeconds($device, $now - (int) $since);
+            $this->mutate('OnSince', $sw, null);
+        }
+    }
+
+    private function addOnSeconds(array $device, int $seconds): void
+    {
+        if ($device['StatVar'] === 0 || $seconds <= 0) {
+            return;
+        }
+        SetValue($device['StatVar'], (int) GetValue($device['StatVar']) + $seconds);
+        $this->SendDebug(__FUNCTION__, sprintf('+%d s :: [%d] %s', $seconds, $device['SwitchVar'], IPS_GetLocation($device['SwitchVar'])), 0);
+    }
+
+    /** Ident der Time-Switch-Variable: TimeSwitch_<SwitchVar>. Ein selbst vergebener fremder Ident bleibt unangetastet. */
+    private function ensureTimeIdent(array $device): void
+    {
+        $timeVar = $device['TimeVar'];
+        $ident = self::TIME_IDENT_PREFIX . $device['SwitchVar'];
+        $current = IPS_GetObject($timeVar)['ObjectIdent'];
+        if ($current === $ident) {
+            return;
+        }
+        if ($current !== '' && strpos($current, self::TIME_IDENT_PREFIX) !== 0) {
+            $this->SendDebug(__FUNCTION__, sprintf('Time Switch [%d] hat bereits den eigenen Ident "%s", unverändert', $timeVar, $current), 0);
+            return;
+        }
+        $existing = @IPS_GetObjectIDByIdent($ident, IPS_GetParent($timeVar));
+        if ($existing && (int) $existing !== $timeVar) {
+            $this->LogMessage(sprintf('Ident %s ist bereits an [%d] vergeben, Time Switch [%d] bekommt keinen Ident', $ident, (int) $existing, $timeVar), KL_WARNING);
+            return;
+        }
+        if (!@IPS_SetIdent($timeVar, $ident)) {
+            $this->LogMessage(sprintf('Ident %s konnte für Time Switch [%d] nicht gesetzt werden', $ident, $timeVar), KL_WARNING);
+            return;
+        }
+        $this->SendDebug(__FUNCTION__, sprintf('Ident %s gesetzt :: [%d]', $ident, $timeVar), 0);
+    }
+
+    private function createStatVar(array $device): void
+    {
+        $parent = $device['TimeVar'] > 0 ? IPS_GetParent($device['TimeVar']) : IPS_GetParent($device['SwitchVar']);
+        $id = IPS_CreateVariable(1);
+        IPS_SetParent($id, $parent);
+        IPS_SetIdent($id, self::STAT_IDENT_PREFIX . $device['SwitchVar']);
+        IPS_SetName($id, 'Total Power On Seconds');
+        IPS_SetInfo($id, 'Betriebszeit, gepflegt von Aktor Controller [' . $this->InstanceID . '] für Schaltvariable ' . $device['SwitchVar']);
+        IPS_SetVariableCustomProfile($id, self::PROFILE_TOTAL);
+        $this->SendDebug(__FUNCTION__, sprintf('Betriebszeit-Variable [%d] angelegt unter [%d] :: %s', $id, $parent, IPS_GetLocation($device['SwitchVar'])), 0);
+    }
+
+    // ------------------------------------------------------------------
+    // Abgleich beim Übernehmen / Start
+    // ------------------------------------------------------------------
+
+    private function reconcile(array $devices): void
+    {
+        $now = time();
+        $timers = array_intersect_key($this->readTable('Timers'), $devices);
+        $verify = array_intersect_key($this->readTable('Verify'), $devices);
+        $onSince = array_intersect_key($this->readTable('OnSince'), $devices);
+
+        foreach ($devices as $sw => $device) {
+            $on = (bool) GetValue($sw);
+
+            // Betriebszeit
+            if ($device['StatVar'] === 0) {
+                unset($onSince[$sw]);
+            } else {
+                $since = $onSince[$sw] ?? null;
+                if ($on && $since === null) {
+                    $onSince[$sw] = $now;
+                } elseif (!$on && $since !== null) {
+                    // AUS-Meldung verpasst: bis zur letzten Änderung der Schaltvariable zählen
+                    $changed = (int) IPS_GetVariable($sw)['VariableChanged'];
+                    $end = min($now, max((int) $since, $changed));
+                    $this->addOnSeconds($device, $end - (int) $since);
+                    unset($onSince[$sw]);
+                }
+            }
+
+            // Time-Switch-Anzeige und Timer
+            if (!$on) {
+                unset($timers[$sw]);
+                if ($device['TimeVar'] > 0 && (int) GetValue($device['TimeVar']) > 0) {
+                    SetValue($device['TimeVar'], 0);
+                }
+            } elseif ($device['TimeVar'] > 0 && (int) GetValue($device['TimeVar']) === 0 && !isset($timers[$sw]) && !isset($verify[$sw])) {
+                SetValue($device['TimeVar'], $this->permanentValue());
+            }
+        }
+
+        $this->writeTable('Timers', $timers);
+        $this->writeTable('Verify', $verify);
+        $this->writeTable('OnSince', $onSince);
+    }
+
+    // ------------------------------------------------------------------
+    // Laufzeitdaten
+    // ------------------------------------------------------------------
+
+    private function readTable(string $attribute): array
+    {
+        $raw = json_decode($this->ReadAttributeString($attribute), true) ?: [];
+        $table = [];
+        foreach ($raw as $key => $value) {
+            $table[(int) $key] = $value;
+        }
+        return $table;
+    }
+
+    private function writeTable(string $attribute, array $table): void
+    {
+        $this->WriteAttributeString($attribute, json_encode((object) $table));
+    }
+
+    /**
+     * Genau einen Eintrag einer Tabelle ändern (frisch lesen, schreiben).
+     * Es werden bewusst keine Treiberaufrufe zwischen Lesen und Schreiben gemacht.
+     *
+     * @param array|int|null $entry null = Eintrag löschen
+     */
+    private function mutate(string $attribute, int $sw, $entry): void
+    {
+        $table = $this->readTable($attribute);
+        if ($entry === null) {
+            if (!isset($table[$sw])) {
+                return;
+            }
+            unset($table[$sw]);
+        } else {
+            $table[$sw] = $entry;
+        }
+        $this->writeTable($attribute, $table);
+        $this->refreshRunState(false);
+    }
+
+    /** Anzahl aktiver Timer anzeigen; Tick und StatsTick nur laufen lassen, solange sie gebraucht werden. */
+    private function refreshRunState(bool $force): void
+    {
+        $timers = $this->readTable('Timers');
+        $pending = count($timers) + count($this->readTable('Verify'));
+
+        $activTimer = $this->GetIDForIdent('activTimer');
+        if ((int) GetValue($activTimer) !== count($timers)) {
+            SetValue($activTimer, count($timers));
+        }
+
+        // SetTimerInterval startet den Timer neu, daher nur bei Zustandswechsel aufrufen
+        $tick = $pending > 0 ? '1' : '0';
+        if ($force || $this->GetBuffer('Tick') !== $tick) {
+            $this->SetTimerInterval('Tick', $pending > 0 ? 1000 : 0);
+            $this->SetBuffer('Tick', $tick);
+            if ($pending === 0) {
+                SetValue($this->GetIDForIdent('tickCnt'), 0);
+            }
+        }
+
+        $statsInterval = $this->ReadPropertyInteger('StatsInterval');
+        $stats = (count($this->readTable('OnSince')) > 0 && $statsInterval > 0) ? '1' : '0';
+        if ($force || $this->GetBuffer('Stats') !== $stats) {
+            $this->SetTimerInterval('StatsTick', $stats === '1' ? $statsInterval * 1000 : 0);
+            $this->SetBuffer('Stats', $stats);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Hilfsfunktionen
+    // ------------------------------------------------------------------
+
+    private function permanentValue(): int
+    {
+        $value = $this->ReadPropertyInteger('PermanentValue');
+        return $value > 0 ? $value : self::DEFAULT_PERMANENT;
+    }
+
+    private function driver(string $name): AktorDriver
+    {
+        $class = self::DRIVERS[$name];
+        return new $class(function (string $source, string $text): void {
+            $this->SendDebug($source, $text, 0);
+        });
+    }
+
+    private function setIfChanged(int $variable, int $value): void
+    {
+        if ((int) GetValue($variable) !== $value) {
+            SetValue($variable, $value);
+        }
+    }
+
+    private function isUnreachable(int $switchVar): bool
+    {
+        $id = @IPS_GetObjectIDByIdent('UNREACH', IPS_GetParent($switchVar));
+        return $id && (bool) GetValue((int) $id);
+    }
+
+    private function formatDuration(int $seconds): string
+    {
+        return sprintf('%02d:%02d:%02d', intdiv($seconds, 3600), intdiv($seconds % 3600, 60), $seconds % 60);
+    }
+
+    /**
+     * Gültige Zeilen der Konfiguration, indiziert nach SwitchVar.
+     *
+     * @return array<int,array{SwitchVar:int,TimeVar:int,Driver:string,Count:bool,StatVar:int}>
+     */
+    private function getDevices(bool $report = false): array
+    {
+        $result = [];
+        $usedTimeVars = [];
+        $rows = json_decode($this->ReadPropertyString('Devices'), true) ?: [];
+
+        foreach ($rows as $index => $row) {
+            $label = '#' . ($index + 1);
+            $sw = (int) ($row['SwitchVar'] ?? 0);
+            $timeVar = (int) ($row['TimeVar'] ?? 0);
+            $driver = (string) ($row['Driver'] ?? '');
+            $count = (bool) ($row['Count'] ?? true);
+
+            if (!isset(self::DRIVERS[$driver])) {
+                $this->warn($report, $label . ': unbekannter Treiber "' . $driver . '", Zeile ignoriert');
+                continue;
+            }
+            if (!IPS_VariableExists($sw)) {
+                $this->warn($report, $label . ': Schaltvariable nicht vorhanden, Zeile ignoriert');
+                continue;
+            }
+            if (isset($result[$sw])) {
+                $this->warn($report, $label . ': Schaltvariable ' . $sw . ' ist doppelt, Zeile ignoriert');
+                continue;
+            }
+            if ($timeVar > 0) {
+                if (!IPS_VariableExists($timeVar) || IPS_GetVariable($timeVar)['VariableType'] !== 1 || $timeVar === $sw) {
+                    $this->warn($report, $label . ': Time Switch ist keine gültige Integer-Variable, Zeile läuft ohne Time Switch');
+                    $timeVar = 0;
+                } elseif (isset($usedTimeVars[$timeVar])) {
+                    $this->warn($report, $label . ': Time Switch ' . $timeVar . ' ist doppelt vergeben, Zeile läuft ohne Time Switch');
+                    $timeVar = 0;
+                } else {
+                    $usedTimeVars[$timeVar] = true;
+                }
+            }
+
+            $statVar = 0;
+            if ($count) {
+                $parent = $timeVar > 0 ? IPS_GetParent($timeVar) : IPS_GetParent($sw);
+                $found = @IPS_GetObjectIDByIdent(self::STAT_IDENT_PREFIX . $sw, $parent);
+                $statVar = $found ? (int) $found : 0;
+            }
+
+            $result[$sw] = [
+                'SwitchVar' => $sw,
+                'TimeVar'   => $timeVar,
+                'Driver'    => $driver,
+                'Count'     => $count,
+                'StatVar'   => $statVar,
+            ];
+        }
+        return $result;
+    }
+
+    private function warn(bool $report, string $text): void
+    {
+        if ($report) {
+            $this->LogMessage($text, KL_WARNING);
+        }
+        $this->SendDebug('Konfiguration', $text, 0);
+    }
+
+    private function resolveSwitchVar($Ident): ?int
+    {
+        $devices = $this->getDevices();
+        foreach ($devices as $sw => $device) {
+            if ($device['TimeVar'] === 0) {
+                continue;
+            }
+            if (is_numeric($Ident) && $device['TimeVar'] === (int) $Ident) {
+                return $sw;
+            }
+            if ((string) $Ident !== '' && IPS_GetObject($device['TimeVar'])['ObjectIdent'] === (string) $Ident) {
+                return $sw;
+            }
+        }
+        return null;
+    }
+
+    /** Vom Modul verwaltetes Profil; wird bei jeder Übernahme neu aufgebaut. */
+    private function ensureProfiles(): void
+    {
+        if (!IPS_VariableProfileExists(self::PROFILE_TOTAL)) {
+            IPS_CreateVariableProfile(self::PROFILE_TOTAL, 1);
+            IPS_SetVariableProfileValues(self::PROFILE_TOTAL, 0, 0, 0);
+            IPS_SetVariableProfileText(self::PROFILE_TOTAL, '', ' s');
+            IPS_SetVariableProfileIcon(self::PROFILE_TOTAL, 'clock');
+        }
+
+        if (!IPS_VariableProfileExists(self::PROFILE_DURATION)) {
+            IPS_CreateVariableProfile(self::PROFILE_DURATION, 1);
+            IPS_SetVariableProfileValues(self::PROFILE_DURATION, 0, 0, 0);
+        }
+        // Werte ohne passende Association (Restlaufzeit) werden mit Suffix angezeigt
+        //IPS_SetVariableProfileText(self::PROFILE_DURATION, '', ' s');
+
+        // Bestehende Associations entfernen (leere Caption = löschen)
+        foreach (IPS_GetVariableProfile(self::PROFILE_DURATION)['Associations'] as $association) {
+            IPS_SetVariableProfileAssociation(self::PROFILE_DURATION, $association['Value'], '', '', -1);
+        }
+
+        // Wert => [Caption, Icon, Farbe (0xRRGGBB oder -1 für keine)]
+        $associations = [
+            0                       => ['Aus [%ds]',       'light-switch-off', 0xFF0000],
+            30                      => ['30 Sec [%ds]',    'timer',            0xC07EEC],
+            60                      => ['1 Min [%ds]',     'timer',            0x00FFDD],
+            180                     => ['3 Min [%ds]',     'timer',            0x00FFDD],
+            300                     => ['5 Min [%ds]',     'timer',            0x00FFDD],
+            600                     => ['10 Min [%ds]',    'timer',            0x00FFDD],
+            1200                    => ['20 Min [%ds]',    'timer',            0x00FFDD],
+            1800                    => ['30 Min [%ds]',    'timer',            0x00FFDD],
+            3600                    => ['1 Std [%ds]',     'timer',            0x00FFDD],
+            5400                    => ['1,5 Std [%ds]',   'timer',            0x00FFDD],
+            7200                    => ['2 Std [%ds]',     'timer',            0x00FFDD],
+            10800                   => ['3 Std [%ds]',     'timer',            0x00FFDD],
+            18000                   => ['5 Std [%ds]',     'timer',            0x00FFDD],
+            36000                   => ['10 Std[%ds]',    'timer',            0x00FFDD],
+            $this->permanentValue() => ['Dauer-EIN [%ds]', 'light-switch-on',  0x00FF00],
+        ];
+
+        foreach ($associations as $value => [$caption, $icon, $color]) {
+            IPS_SetVariableProfileAssociation(self::PROFILE_DURATION, $value, $caption, $icon, $color);
+        }
+    }
+}

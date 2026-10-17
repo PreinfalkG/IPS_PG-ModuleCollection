@@ -223,21 +223,21 @@ class TimeSwitchController extends IPSModule
 
         // Wert => [Caption, Icon, Farbe (0xRRGGBB oder -1 für keine)]
         $associations = [
-            0                       => ['Aus',       'light-switch-off',    0xFF0000],
-            30                      => ['30 Sec',    'timer',               0xC07EEC],
-            60                      => ['1 Min',     'timer',               0x00FFDD],
-            180                     => ['3 Min',     'timer',               0x00FFDD],
-            300                     => ['5 Min',     'timer',               0x00FFDD],
-            600                     => ['10 Min',    'timer',               0x00FFDD],
-            1200                    => ['20 Min',    'timer',               0x00FFDD],
-            1800                    => ['30 Min',    'timer',               0x00FFDD],
-            3600                    => ['1 Std',     'timer',               0x00FFDD],
-            5400                    => ['1,5 Std',   'Clock',               0x00FFDD],
-            7200                    => ['2 Std',     'timer',               0x00FFDD],
-            10800                   => ['3 Std',     'timer',               0x00FFDD],
-            18000                   => ['5 Std',     'timer',               0x00FFDD],
-            36000                   => ['10 Std',    'timer',               0x00FFDD],
-            $this->permanentValue() => ['Dauer-EIN', 'light-switch-on',     0x00FF00],
+            0                       => ['Aus [%d]',       'light-switch-off',    0xFF0000],
+            30                      => ['30 Sec [%d s]',    'timer',               0xC07EEC],
+            60                      => ['1 Min [%d s]',     'timer',               0x00FFDD],
+            180                     => ['3 Min [%d s]',     'timer',               0x00FFDD],
+            300                     => ['5 Min [%d s]',     'timer',               0x00FFDD],
+            600                     => ['10 Min [%d s]',    'timer',               0x00FFDD],
+            1200                    => ['20 Min [%d s]',    'timer',               0x00FFDD],
+            1800                    => ['30 Min [%d s]',    'timer',               0x00FFDD],
+            3600                    => ['1 Std [%d s]',     'timer',               0x00FFDD],
+            5400                    => ['1,5 Std [%d s]',   'Clock',               0x00FFDD],
+            7200                    => ['2 Std [%d s]',     'timer',               0x00FFDD],
+            10800                   => ['3 Std [%d s]',     'timer',               0x00FFDD],
+            18000                   => ['5 Std [%d s]',     'timer',               0x00FFDD],
+            36000                   => ['10 Std [%d s]',    'timer',               0x00FFDD],
+            $this->permanentValue() => ['Dauer-EIN [%d s]', 'light-switch-on',     0x00FF00],
         ];
 
         foreach ($associations as $value => [$caption, $icon, $color]) {

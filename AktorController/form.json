@@ -1,0 +1,175 @@
+{
+    "elements": [
+        {
+            "type": "Label",
+            "caption": "Jede Zeile beschreibt einen Aktor: die Schaltvariable (STATE) und optional eine selbst angelegte Integer-Variable 'Time Switch' (Sekunden). Die Aktion der Time-Switch-Variable wird automatisch auf diese Instanz gesetzt. Ohne Time Switch lässt sich der Aktor über die Funktionen AKTC_SwitchOn / AKTC_SwitchOff schalten."
+        },
+        {
+            "type": "NumberSpinner",
+            "name": "PermanentValue",
+            "caption": "Wert für Dauer-EIN in der Time-Switch-Variable (reiner Anzeigewert, kein Timer)",
+            "minimum": 1
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Erweiterte Einstellungen",
+            "width": "800px",
+            "items": [
+                {
+                    "type": "NumberSpinner",
+                    "name": "VerifyDelay",
+                    "caption": "HomeMatic: Wartezeit nach Ablauf bis zur Kontrolle 'wirklich AUS'",
+                    "suffix": "Sekunden",
+                    "minimum": 1,
+                    "width": "600px"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "VerifyRetries",
+                    "caption": "Wiederholungen des AUS-Befehls, wenn der Aktor noch EIN ist",
+                    "minimum": 0,
+                    "width": "600px"
+                },
+                {
+                    "type": "Select",
+                    "name": "RemainingUpdate",
+                    "caption": "Restlaufzeit in der Time-Switch-Variable aktualisieren",
+                    "width": "600px",
+                    "options": [
+                        { "caption": "Aus (gewählter Wert bleibt stehen)", "value": 0 },
+                        { "caption": "jede Sekunde", "value": 1 },
+                        { "caption": "alle 5 Sekunden", "value": 5 },
+                        { "caption": "alle 10 Sekunden", "value": 10 },
+                        { "caption": "alle 30 Sekunden", "value": 30 }
+                    ]
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "StatsInterval",
+                    "caption": "Betriebszeit speichern solange ein Aktor EIN ist (0 = nur beim Ausschalten)",
+                    "suffix": "Sekunden",
+                    "minimum": 0,
+                    "width": "600px"
+                }
+            ]
+        },
+        {
+            "type": "List",
+            "name": "Devices",
+            "caption": "Aktoren",
+            "add": true,
+            "delete": true,
+            "rowCount": 12,
+            "columns": [
+                {
+                    "caption": "Schaltvariable (STATE)",
+                    "name": "SwitchVar",
+                    "width": "auto",
+                    "add": 0,
+                    "edit": {
+                        "type": "SelectVariable"
+                    }
+                },
+                {
+                    "caption": "Treiber",
+                    "name": "Driver",
+                    "width": "280px",
+                    "add": "generic",
+                    "edit": {
+                        "type": "Select",
+                        "options": [
+                            {
+                                "caption": "HomeMatic / HmIP (natives ON_TIME)",
+                                "value": "hm"
+                            },
+                            {
+                                "caption": "Generisch (IP-Symcon schaltet aus)",
+                                "value": "generic"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "caption": "Time Switch (Integer, optional)",
+                    "name": "TimeVar",
+                    "width": "auto",
+                    "add": 0,
+                    "edit": {
+                        "type": "SelectVariable"
+                    }
+                },
+                {
+                    "caption": "Betriebszeit zählen",
+                    "name": "Count",
+                    "width": "150px",
+                    "add": true,
+                    "edit": {
+                        "type": "CheckBox"
+                    }
+                }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "type": "RowLayout",
+            "items": [
+                {
+                    "type": "Button",
+                    "caption": "Aktive Timer anzeigen",
+                    "onClick": "echo AKTC_GetActivTimer($id, true);"
+                },
+                {
+                    "type": "Button",
+                    "caption": "Eingeschaltete Aktoren anzeigen",
+                    "onClick": "echo AKTC_GetActiveDevices($id, true);"
+                }
+            ]
+        },
+        {
+            "type": "Label",
+            "caption": "Export / Import der Zuordnung (JSON, Stand der zuletzt übernommenen Konfiguration)"
+        },
+        {
+            "type": "ValidationTextBox",
+            "name": "ExchangeText",
+            "caption": "JSON",
+            "multiline": true,
+            "value": ""
+        },
+        {
+            "type": "CheckBox",
+            "name": "ImportMerge",
+            "caption": "Import mit vorhandenen Zeilen zusammenführen (sonst ersetzen)",
+            "value": false
+        },
+        {
+            "type": "RowLayout",
+            "items": [
+                {
+                    "type": "Button",
+                    "caption": "Export",
+                    "onClick": "AKTC_Export($id);"
+                },
+                {
+                    "type": "Button",
+                    "caption": "Export als Datei",
+                    "download": "AktorController.json",
+                    "onClick": "echo 'data:application/json;base64,' . base64_encode(AKTC_Export($id));"
+                },
+                {
+                    "type": "Button",
+                    "confirm": "Der JSON-Inhalt wird in die Tabelle geladen und ersetzt sie bzw. wird mit ihr zusammengeführt (je nach Checkbox). Fortfahren?",
+                    "caption": "Import",
+                    "onClick": "AKTC_Import($id, $ExchangeText, $ImportMerge);"
+                }
+            ]
+        },
+        {
+            "type": "Label",
+            "name": "ExchangeResult",
+            "caption": ""
+        }
+    ],
+    "status": []
+}
