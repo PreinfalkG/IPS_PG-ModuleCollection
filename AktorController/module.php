@@ -29,6 +29,9 @@ class AktorController extends IPSModule
     private const DEFAULT_PERMANENT = 999999;
     private const VERIFY_AFTER_COMMAND = 10;          // Sekunden bis zur Kontrolle nach einem AUS-Befehl / zwischen Wiederholungen
     private const STAT_IDENT_PREFIX = 'TotalOnSeconds_';
+    private const PROFILE_GROUP = 'AKTC.GroupState';
+    private const GROUP_IDENT_PREFIX = 'Group_';
+    private const GROUP_INFO_PREFIX = 'GroupInfo_';
     private const TIME_IDENT_PREFIX = 'TimeSwitch_'; 
 
     public function Create()
@@ -40,6 +43,8 @@ class AktorController extends IPSModule
         $this->RegisterPropertyInteger('VerifyRetries', 2);
         $this->RegisterPropertyInteger('RemainingUpdate', 1);
         $this->RegisterPropertyInteger('StatsInterval', 60);
+        $this->RegisterPropertyString('Groups', '[]');                 // [{Name}]
+        $this->RegisterPropertyBoolean('GroupSkipUnchanged', true);    // Gruppenbefehl überspringt Aktoren, die schon im Zielzustand sind
 
         // Laufzeitdaten, alle nach SwitchVar indiziert
         $this->RegisterAttributeString('Timers', '{}');      // {sw: {End, Mode: sw|native, Seconds}}
@@ -124,6 +129,7 @@ class AktorController extends IPSModule
         }
 
         $this->reconcile($devices);
+        $this->syncGroupVariables($devices);
         $this->refreshRunState(true);
         $this->SetStatus(102);
     }
@@ -136,6 +142,12 @@ class AktorController extends IPSModule
     public function RequestAction($Ident, $Value)
     {
         $this->SendDebug(__FUNCTION__, 'Ident=' . json_encode($Ident) . ' Value=' . json_encode($Value), 0);
+
+        // Gruppenvariable (Instanzvariable mit EnableAction: Ident ist ein Text)
+        if (is_string($Ident) && strpos($Ident, self::GROUP_IDENT_PREFIX) === 0) {
+            $this->requestGroup($Ident, (int) $Value);
+            return;
+        }
 
         $switchVar = $this->resolveSwitchVar($Ident);
         if ($switchVar === null) {
@@ -273,6 +285,89 @@ class AktorController extends IPSModule
         return $text;
     }
 
+    /** AKTC_GroupOn($id, $Group) – alle Mitglieder der Gruppe EIN (Dauer-EIN). true, wenn kein Befehl fehlgeschlagen ist. */
+    public function GroupOn(string $Group): bool
+    {
+        return $this->groupCommand($Group, 'on', 0);
+    }
+
+    /** AKTC_GroupTimed($id, $Group, $Seconds) – alle Mitglieder der Gruppe für $Seconds Sekunden EIN. */
+    public function GroupTimed(string $Group, int $Seconds): bool
+    {
+        if ($Seconds <= 0) {
+            return false;
+        }
+        return $this->groupCommand($Group, 'on', $Seconds === $this->permanentValue() ? 0 : $Seconds);
+    }
+
+    /** AKTC_GroupOff($id, $Group) – alle Mitglieder der Gruppe AUS. */
+    public function GroupOff(string $Group): bool
+    {
+        return $this->groupCommand($Group, 'off', 0);
+    }
+
+    /** AKTC_GetGroupList($id, $asText) – alle Gruppen mit Zustand (0 = alle aus, 1 = teilweise, 2 = alle ein). */
+    public function GetGroupList(bool $asText)
+    {
+        $list = [];
+        foreach ($this->getGroups($this->getDevices()) as $group) {
+            $on = $this->countOn($group['Members']);
+            $list[] = [
+                'Name'     => $group['Name'],
+                'Members'  => count($group['Members']),
+                'On'       => $on,
+                'State'    => $this->groupState($on, count($group['Members'])),
+                'Variable' => (int) @$this->GetIDForIdent($group['Ident']),
+            ];
+        }
+        if (!$asText) {
+            return $list;
+        }
+        $text = sprintf("Gruppen: %d\n", count($list));
+        foreach ($list as $entry) {
+            $text .= sprintf("%s | %d/%d EIN\n", $entry['Name'], $entry['On'], $entry['Members']);
+        }
+        return $text;
+    }
+
+    /** AKTC_GetGroupState($id, $Group, $asText) – Zustand und Mitglieder einer Gruppe, false bei unbekannter Gruppe. */
+    public function GetGroupState(string $Group, bool $asText)
+    {
+        $group = $this->findGroup($this->getGroups($this->getDevices()), $Group);
+        if ($group === null) {
+            $this->LogMessage(sprintf('Gruppe "%s" ist nicht konfiguriert', $Group), KL_WARNING);
+            return false;
+        }
+        $now = time();
+        $timers = $this->readTable('Timers');
+        $devices = [];
+        foreach ($group['Members'] as $sw) {
+            $devices[] = [
+                'SwitchVar' => $sw,
+                'Name'      => IPS_GetLocation($sw),
+                'On'        => (bool) GetValue($sw),
+                'Remaining' => isset($timers[$sw]) ? max(0, (int) $timers[$sw]['End'] - $now) : null,
+            ];
+        }
+        $total = count($devices);
+        $on = count(array_filter($devices, fn($d) => $d['On']));
+        $result = [
+            'Name'    => $group['Name'],
+            'Members' => $total,
+            'On'      => $on,
+            'State'   => $this->groupState($on, $total),
+            'Devices' => $devices,
+        ];
+        if (!$asText) {
+            return $result;
+        }
+        $text = sprintf("Gruppe %s: %d/%d EIN\n", $result['Name'], $on, $total);
+        foreach ($devices as $d) {
+            $text .= sprintf("[%d] %s | %s\n", $d['SwitchVar'], $d['Name'], $d['On'] ? ($d['Remaining'] !== null ? 'EIN, noch ' . $this->formatDuration($d['Remaining']) : 'EIN') : 'AUS');
+        }
+        return $text;
+    }
+
     /** AKTC_GetTotalOnSeconds($id, $SwitchVar) – gesamte Einschaltdauer inklusive des aktuell laufenden Abschnitts. */
     public function GetTotalOnSeconds(int $SwitchVar): int
     {
@@ -382,13 +477,17 @@ class AktorController extends IPSModule
         if ($Message !== VM_UPDATE) {
             return;
         }
-        $device = $this->getDevices()[$SenderID] ?? null;
+        $devices = $this->getDevices();
+        $device = $devices[$SenderID] ?? null;
         if ($device === null) {
             return;
         }
         $on = (bool) $Data[0];
         $this->trackOnTime($device, $on);
         $this->syncState($device, $on);
+        if ($device['Groups'] !== []) {
+            $this->updateGroupStates($this->getGroups($devices), $device['Groups']);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -768,13 +867,14 @@ class AktorController extends IPSModule
     /**
      * Gültige Zeilen der Konfiguration, indiziert nach SwitchVar.
      *
-     * @return array<int,array{SwitchVar:int,TimeVar:int,Driver:string,Count:bool,StatVar:int}>
+     * @return array<int,array{SwitchVar:int,TimeVar:int,Driver:string,Count:bool,StatVar:int,Groups:string[]}>
      */
     private function getDevices(bool $report = false): array
     {
         $result = [];
         $usedTimeVars = [];
         $rows = json_decode($this->ReadPropertyString('Devices'), true) ?: [];
+        $groupNames = $this->configuredGroupNames($report);
 
         foreach ($rows as $index => $row) {
             $label = '#' . ($index + 1);
@@ -814,15 +914,269 @@ class AktorController extends IPSModule
                 $statVar = $found ? (int) $found : 0;
             }
 
+            $groups = [];
+            foreach ($this->parseTags((string) ($row['Groups'] ?? '')) as $tag) {
+                $key = mb_strtolower($tag);
+                if (!isset($groupNames[$key])) {
+                    $this->warn($report, $label . ': Gruppe "' . $tag . '" steht nicht in der Gruppenliste, ignoriert');
+                    continue;
+                }
+                if (!in_array($groupNames[$key], $groups, true)) {
+                    $groups[] = $groupNames[$key];
+                }
+            }
+
             $result[$sw] = [
                 'SwitchVar' => $sw,
                 'TimeVar'   => $timeVar,
                 'Driver'    => $driver,
                 'Count'     => $count,
                 'StatVar'   => $statVar,
+                'Groups'    => $groups,
             ];
         }
         return $result;
+    }
+
+    // ------------------------------------------------------------------
+    // Gruppen
+    // ------------------------------------------------------------------
+
+    /** $action: 'on' (mit $seconds = 0 für Dauer-EIN) oder 'off'. */
+    private function groupCommand(string $name, string $action, int $seconds): bool
+    {
+        $devices = $this->getDevices();
+        $groups = $this->getGroups($devices);
+        $group = $this->findGroup($groups, $name);
+        if ($group === null) {
+            $this->LogMessage(sprintf('Gruppe "%s" ist nicht konfiguriert', $name), KL_WARNING);
+            return false;
+        }
+        if ($group['Members'] === []) {
+            $this->LogMessage(sprintf('Gruppe "%s" hat keine Mitglieder', $group['Name']), KL_WARNING);
+            return false;
+        }
+
+        $skipUnchanged = $this->ReadPropertyBoolean('GroupSkipUnchanged');
+        $timers = $this->readTable('Timers');
+        $verify = $this->readTable('Verify');
+        $started = microtime(true);
+        $done = 0;
+        $skipped = 0;
+        $failed = [];
+
+        foreach ($group['Members'] as $sw) {
+            $on = (bool) GetValue($sw);
+            if ($skipUnchanged) {
+                // AUS: schon aus und nichts offen. Dauer-EIN: schon ein ohne Timer. Befristetes EIN wird immer gesendet.
+                $unchanged = false;
+                if ($action === 'off') {
+                    $unchanged = !$on && !isset($timers[$sw]) && !isset($verify[$sw]);
+                } elseif ($seconds === 0) {
+                    $unchanged = $on && !isset($timers[$sw]) && !isset($verify[$sw]);
+                }
+                if ($unchanged) {
+                    $skipped++;
+                    continue;
+                }
+            }
+            $ok = $action === 'off'
+                ? $this->switchOffInternal($devices[$sw], 'Gruppe ' . $group['Name'])
+                : $this->switchOnInternal($devices[$sw], $seconds);
+            if ($ok) {
+                $done++;
+            } else {
+                $failed[] = $sw;
+            }
+        }
+
+        $ms = (int) round((microtime(true) - $started) * 1000);
+        $this->SendDebug(__FUNCTION__, sprintf('Gruppe %s %s%s: %d geschaltet, %d übersprungen, %d fehlgeschlagen, %d ms', $group['Name'], $action === 'off' ? 'AUS' : 'EIN', $seconds > 0 ? ' ' . $seconds . ' s' : '', $done, $skipped, count($failed), $ms), 0);
+        if ($failed !== []) {
+            $names = array_map(fn($sw) => '[' . $sw . '] ' . IPS_GetLocation($sw), $failed);
+            $this->LogMessage(sprintf('Gruppe %s: %d von %d Befehlen fehlgeschlagen: %s', $group['Name'], count($failed), count($group['Members']), implode('; ', $names)), KL_WARNING);
+        }
+        if ($ms > 5000) {
+            $this->LogMessage(sprintf('Gruppe %s: der Befehl dauerte %d ms bei %d Aktoren', $group['Name'], $ms, count($group['Members'])), KL_WARNING);
+        }
+        $this->updateGroupStates($groups, [$group['Name']]);
+        return $failed === [];
+    }
+
+    /** Aktion einer Gruppenvariable: 0 = alle AUS, 2 = alle EIN (Dauer), 1 (Teilweise) ist nur eine Anzeige. */
+    private function requestGroup(string $ident, int $value): void
+    {
+        foreach ($this->getGroups($this->getDevices()) as $group) {
+            if ($group['Ident'] !== $ident) {
+                continue;
+            }
+            if ($value === 0) {
+                $this->groupCommand($group['Name'], 'off', 0);
+            } elseif ($value === 2) {
+                $this->groupCommand($group['Name'], 'on', 0);
+            } else {
+                $this->SendDebug(__FUNCTION__, sprintf('Wert %d bei Gruppe %s ignoriert (nur 0 = Aus und 2 = Ein schalten)', $value, $group['Name']), 0);
+            }
+            return;
+        }
+        $this->LogMessage('RequestAction: unbekannte Gruppenvariable ' . $ident, KL_WARNING);
+    }
+
+    /** Gruppenvariablen (Zustand und Text) als Instanzvariablen anlegen, nicht mehr benötigte entfernen. */
+    private function syncGroupVariables(array $devices): void
+    {
+        $groups = $this->getGroups($devices);
+        $keep = [];
+        $position = 200;
+        foreach ($groups as $group) {
+            $this->RegisterVariableInteger($group['Ident'], $group['Name'], self::PROFILE_GROUP, $position);
+            $this->EnableAction($group['Ident']);
+            $this->RegisterVariableString($group['InfoIdent'], $group['Name'] . ' Status', '', $position + 1);
+            $keep[$group['Ident']] = true;
+            $keep[$group['InfoIdent']] = true;
+            $position += 2;
+        }
+        foreach (IPS_GetChildrenIDs($this->InstanceID) as $child) {
+            if (!IPS_VariableExists($child)) {
+                continue;
+            }
+            $ident = IPS_GetObject($child)['ObjectIdent'];
+            $isGroupVar = strpos($ident, self::GROUP_IDENT_PREFIX) === 0 || strpos($ident, self::GROUP_INFO_PREFIX) === 0;
+            if ($isGroupVar && !isset($keep[$ident])) {
+                $this->SendDebug(__FUNCTION__, sprintf('Gruppenvariable %s entfernt (Gruppe nicht mehr konfiguriert)', $ident), 0);
+                $this->UnregisterVariable($ident);
+            }
+        }
+        $this->updateGroupStates($groups, null);
+    }
+
+    /** Zustand (0/1/2) und Text der Gruppenvariablen aktualisieren. $onlyNames: nur diese Gruppen. */
+    private function updateGroupStates(array $groups, ?array $onlyNames): void
+    {
+        $only = null;
+        if ($onlyNames !== null) {
+            $only = [];
+            foreach ($onlyNames as $name) {
+                $only[mb_strtolower($name)] = true;
+            }
+        }
+        foreach ($groups as $key => $group) {
+            if ($only !== null && !isset($only[$key])) {
+                continue;
+            }
+            $total = count($group['Members']);
+            $on = $this->countOn($group['Members']);
+
+            $stateVar = @$this->GetIDForIdent($group['Ident']);
+            if ($stateVar) {
+                $this->setIfChanged((int) $stateVar, $this->groupState($on, $total));
+            }
+            $infoVar = @$this->GetIDForIdent($group['InfoIdent']);
+            if ($infoVar) {
+                $text = $total === 0 ? 'keine Mitglieder' : sprintf('%d/%d EIN', $on, $total);
+                if (GetValue((int) $infoVar) !== $text) {
+                    SetValue((int) $infoVar, $text);
+                }
+            }
+        }
+    }
+
+    private function countOn(array $members): int
+    {
+        $on = 0;
+        foreach ($members as $sw) {
+            if ((bool) GetValue($sw)) {
+                $on++;
+            }
+        }
+        return $on;
+    }
+
+    private function groupState(int $on, int $total): int
+    {
+        if ($on === 0) {
+            return 0;
+        }
+        return $on === $total ? 2 : 1;
+    }
+
+    /**
+     * Gruppen aus der Gruppenliste mit ihren Mitgliedern. Schlüssel = Name in Kleinbuchstaben.
+     *
+     * @return array<string,array{Name:string,Ident:string,InfoIdent:string,Members:int[]}>
+     */
+    private function getGroups(array $devices): array
+    {
+        $groups = [];
+        $usedIdents = [];
+        foreach ($this->configuredGroupNames(false) as $key => $name) {
+            $slug = $this->groupSlug($name);
+            if (isset($usedIdents[$slug])) {
+                $slug .= '_' . substr(md5($name), 0, 6);
+            }
+            $usedIdents[$slug] = true;
+            $groups[$key] = [
+                'Name'      => $name,
+                'Ident'     => self::GROUP_IDENT_PREFIX . $slug,
+                'InfoIdent' => self::GROUP_INFO_PREFIX . $slug,
+                'Members'   => [],
+            ];
+        }
+        foreach ($devices as $sw => $device) {
+            foreach ($device['Groups'] as $name) {
+                $groups[mb_strtolower($name)]['Members'][] = $sw;
+            }
+        }
+        return $groups;
+    }
+
+    private function findGroup(array $groups, string $name): ?array
+    {
+        return $groups[mb_strtolower(trim($name))] ?? null;
+    }
+
+    /** Namen aus der Gruppenliste: Kleinbuchstaben => Name. Leere, doppelte und Namen mit Komma/Semikolon werden ignoriert. */
+    private function configuredGroupNames(bool $report): array
+    {
+        $names = [];
+        foreach (json_decode($this->ReadPropertyString('Groups'), true) ?: [] as $index => $row) {
+            $name = trim((string) ($row['Name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            if (strpbrk($name, ',;') !== false) {
+                $this->warn($report, sprintf('Gruppe #%d "%s": Komma und Semikolon sind im Namen nicht erlaubt, ignoriert', $index + 1, $name));
+                continue;
+            }
+            $key = mb_strtolower($name);
+            if (isset($names[$key])) {
+                $this->warn($report, sprintf('Gruppe #%d "%s" ist doppelt, ignoriert', $index + 1, $name));
+                continue;
+            }
+            $names[$key] = $name;
+        }
+        return $names;
+    }
+
+    /** "EG, Büro; Abwesend" => ['EG', 'Büro', 'Abwesend'] */
+    private function parseTags(string $text): array
+    {
+        $tags = [];
+        foreach (preg_split('/[,;]/', $text) ?: [] as $tag) {
+            $tag = trim($tag);
+            if ($tag !== '') {
+                $tags[] = $tag;
+            }
+        }
+        return $tags;
+    }
+
+    /** Ident-Teil aus dem Namen: nur a-z, 0-9 und _ (Umlaute ersetzt). */
+    private function groupSlug(string $name): string
+    {
+        $slug = strtr($name, ['ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'Ä' => 'Ae', 'Ö' => 'Oe', 'Ü' => 'Ue', 'ß' => 'ss']);
+        $slug = strtolower(trim((string) preg_replace('/[^A-Za-z0-9]+/', '_', $slug), '_'));
+        return $slug !== '' ? $slug : substr(md5($name), 0, 8);
     }
 
     private function warn(bool $report, string $text): void
@@ -887,12 +1241,24 @@ class AktorController extends IPSModule
             7200                    => ['2 Std [%ds]',     'timer',            0x00FFDD],
             10800                   => ['3 Std [%ds]',     'timer',            0x00FFDD],
             18000                   => ['5 Std [%ds]',     'timer',            0x00FFDD],
-            36000                   => ['10 Std[%ds]',    'timer',            0x00FFDD],
-            $this->permanentValue() => ['Dauer-EIN [%ds]', 'light-switch-on',  0x00FF00],
+            36000                   => ['10 Std[%ds]',      'timer',            0x00FFDD],
+            $this->permanentValue() => ['Dauer-EIN',        'light-switch-on',  0x00FF00],
         ];
 
         foreach ($associations as $value => [$caption, $icon, $color]) {
             IPS_SetVariableProfileAssociation(self::PROFILE_DURATION, $value, $caption, $icon, $color);
         }
+
+        // Gruppenzustand: 0 = alle aus, 1 = teilweise ein (nur Anzeige), 2 = alle ein
+        if (!IPS_VariableProfileExists(self::PROFILE_GROUP)) {
+            IPS_CreateVariableProfile(self::PROFILE_GROUP, 1);
+            IPS_SetVariableProfileValues(self::PROFILE_GROUP, 0, 0, 0);
+        }
+        foreach (IPS_GetVariableProfile(self::PROFILE_GROUP)['Associations'] as $association) {
+            IPS_SetVariableProfileAssociation(self::PROFILE_GROUP, $association['Value'], '', '', -1);
+        }
+        IPS_SetVariableProfileAssociation(self::PROFILE_GROUP, 0, 'Aus', 'light-switch-off', 0xFF0000);
+        IPS_SetVariableProfileAssociation(self::PROFILE_GROUP, 1, 'Teilweise', 'light-switch', 0xFFC800);
+        IPS_SetVariableProfileAssociation(self::PROFILE_GROUP, 2, 'Ein', 'light-switch-on', 0x00FF00);
     }
 }

@@ -10,6 +10,7 @@ declare(strict_types=1);
  * Beim Import wird zuerst die ID genommen (wenn der Pfad noch passt), sonst der Pfad aufgelöst.
  * So funktioniert der Import auch nach einer Neuinstallation oder auf einem anderen System.
  *
+ * Gruppen: Gruppenliste (GroupList) und pro Zeile der Text der Spalte Gruppen.
  * Betriebszeiten (TotalOnSeconds) sind Laufzeitdaten und nicht Teil der Konfiguration.
  */
 trait AktorControllerExportImport
@@ -30,23 +31,34 @@ trait AktorControllerExportImport
                 'TimeVarPath'   => IPS_VariableExists($timeVar) ? IPS_GetLocation($timeVar) : '',
                 'Driver'        => (string) ($row['Driver'] ?? ''),
                 'Count'         => (bool) ($row['Count'] ?? true),
+                'Groups'        => (string) ($row['Groups'] ?? ''),
             ];
+        }
+
+        $groupList = [];
+        foreach (json_decode($this->ReadPropertyString('Groups'), true) ?: [] as $group) {
+            $name = trim((string) ($group['Name'] ?? ''));
+            if ($name !== '') {
+                $groupList[] = $name;
+            }
         }
 
         $settings = [];
         foreach (self::EXCHANGE_SETTINGS as $name) {
             $settings[$name] = $this->ReadPropertyInteger($name);
         }
+        $settings['GroupSkipUnchanged'] = $this->ReadPropertyBoolean('GroupSkipUnchanged');
 
         $json = json_encode([
             'Format'   => 'AktorController',
-            'Version'  => 1,
-            'Settings' => $settings,
-            'Devices'  => $devices,
+            'Version'   => 2,
+            'Settings'  => $settings,
+            'GroupList' => $groupList,
+            'Devices'   => $devices,
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $this->UpdateFormField('ExchangeText', 'value', $json);
-        $this->UpdateFormField('ExchangeResult', 'caption', sprintf('Export: %d Zeilen (gespeicherter Stand).', count($devices)));
+        $this->UpdateFormField('ExchangeResult', 'caption', sprintf('Export: %d Zeilen, %d Gruppen (gespeicherter Stand).', count($devices), count($groupList)));
         return $json;
     }
 
@@ -66,6 +78,7 @@ trait AktorControllerExportImport
                     'TimeVar'   => (int) ($row['TimeVar'] ?? 0),
                     'Driver'    => (string) $row['Driver'],
                     'Count'     => (bool) ($row['Count'] ?? true),
+                    'Groups'    => (string) ($row['Groups'] ?? ''),
                 ];
             }
         }
@@ -108,16 +121,42 @@ trait AktorControllerExportImport
                 'TimeVar'   => $timeVar,
                 'Driver'    => $driver,
                 'Count'     => (bool) ($entry['Count'] ?? true),
+                // Export ohne Spalte Gruppen (Version 1): vorhandene Zuordnung beim Zusammenführen behalten
+                'Groups'    => (string) ($entry['Groups'] ?? ($bySwitchVar[$switchVar]['Groups'] ?? '')),
             ];
             $loaded++;
         }
 
         $this->UpdateFormField('Devices', 'values', json_encode(array_values($bySwitchVar)));
+
+        if (is_array($doc['GroupList'] ?? null)) {
+            $names = [];
+            if ($merge) {
+                foreach (json_decode($this->ReadPropertyString('Groups'), true) ?: [] as $group) {
+                    $names[mb_strtolower(trim((string) ($group['Name'] ?? '')))] = trim((string) ($group['Name'] ?? ''));
+                }
+            }
+            foreach ($doc['GroupList'] as $name) {
+                $name = trim((string) $name);
+                if ($name !== '') {
+                    $names[mb_strtolower($name)] = $names[mb_strtolower($name)] ?? $name;
+                }
+            }
+            unset($names['']);
+            $rows = [];
+            foreach ($names as $name) {
+                $rows[] = ['Name' => $name];
+            }
+            $this->UpdateFormField('Groups', 'values', json_encode($rows));
+        }
         if (!$merge && is_array($doc['Settings'] ?? null)) {
             foreach (self::EXCHANGE_SETTINGS as $name) {
                 if (isset($doc['Settings'][$name])) {
                     $this->UpdateFormField($name, 'value', (int) $doc['Settings'][$name]);
                 }
+            }
+            if (isset($doc['Settings']['GroupSkipUnchanged'])) {
+                $this->UpdateFormField('GroupSkipUnchanged', 'value', (bool) $doc['Settings']['GroupSkipUnchanged']);
             }
         }
 

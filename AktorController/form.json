@@ -50,6 +50,30 @@
                     "suffix": "Sekunden",
                     "minimum": 0,
                     "width": "600px"
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "GroupSkipUnchanged",
+                    "caption": "Gruppenbefehle überspringen Aktoren, die schon im Zielzustand sind (schneller, weniger Funkverkehr)"
+                }
+            ]
+        },
+        {
+            "type": "List",
+            "name": "Groups",
+            "caption": "Gruppen (z. B. Erdgeschoß, Obergeschoß, Keller, Büro, Abwesend)",
+            "add": true,
+            "delete": true,
+            "rowCount": 6,
+            "columns": [
+                {
+                    "caption": "Gruppenname",
+                    "name": "Name",
+                    "width": "auto",
+                    "add": "",
+                    "edit": {
+                        "type": "ValidationTextBox"
+                    }
                 }
             ]
         },
@@ -106,6 +130,15 @@
                     "edit": {
                         "type": "CheckBox"
                     }
+                },
+                {
+                    "caption": "Gruppen (Komma getrennt)",
+                    "name": "Groups",
+                    "width": "250px",
+                    "add": "",
+                    "edit": {
+                        "type": "ValidationTextBox"
+                    }
                 }
             ]
         }
@@ -123,6 +156,11 @@
                     "type": "Button",
                     "caption": "Eingeschaltete Aktoren anzeigen",
                     "onClick": "echo AKTC_GetActiveDevices($id, true);"
+                },
+                {
+                    "type": "Button",
+                    "caption": "Gruppen anzeigen",
+                    "onClick": "echo AKTC_GetGroupList($id, true);"
                 }
             ]
         },
