@@ -83,12 +83,12 @@
             "caption": "Aktoren",
             "add": true,
             "delete": true,
-            "rowCount": 12,
+            "rowCount": 36,
             "columns": [
                 {
                     "caption": "Schaltvariable (STATE)",
                     "name": "SwitchVar",
-                    "width": "auto",
+                    "width": "850px",
                     "add": 0,
                     "edit": {
                         "type": "SelectVariable"
@@ -97,7 +97,7 @@
                 {
                     "caption": "Treiber",
                     "name": "Driver",
-                    "width": "280px",
+                    "width": "255px",
                     "add": "generic",
                     "edit": {
                         "type": "Select",
@@ -116,7 +116,7 @@
                 {
                     "caption": "Time Switch (Integer, optional)",
                     "name": "TimeVar",
-                    "width": "auto",
+                    "width": "800px",
                     "add": 0,
                     "edit": {
                         "type": "SelectVariable"
@@ -125,7 +125,7 @@
                 {
                     "caption": "Betriebszeit zählen",
                     "name": "Count",
-                    "width": "150px",
+                    "width": "45px",
                     "add": true,
                     "edit": {
                         "type": "CheckBox"
@@ -134,7 +134,7 @@
                 {
                     "caption": "Gruppen (Komma getrennt)",
                     "name": "Groups",
-                    "width": "250px",
+                    "width": "260px",
                     "add": "",
                     "edit": {
                         "type": "ValidationTextBox"
