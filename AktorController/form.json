@@ -64,7 +64,8 @@
             "caption": "Gruppen (z. B. Erdgeschoß, Obergeschoß, Keller, Büro, Abwesend)",
             "add": true,
             "delete": true,
-            "rowCount": 6,
+            "changeOrder": true,
+            "rowCount": 10,
             "columns": [
                 {
                     "caption": "Gruppenname",
@@ -83,6 +84,7 @@
             "caption": "Aktoren",
             "add": true,
             "delete": true,
+            "changeOrder": true,
             "rowCount": 36,
             "columns": [
                 {
@@ -173,6 +175,7 @@
             "name": "ExchangeText",
             "caption": "JSON",
             "multiline": true,
+            "width": "920px",
             "value": ""
         },
         {
