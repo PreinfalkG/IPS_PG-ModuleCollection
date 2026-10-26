@@ -48,6 +48,6 @@ Attribute `Timers`, `Verify`, `OnSince` (alle nach SwitchVar indiziert), Variabl
 - Export/Import: Version 2 enthält Gruppenliste und Gruppen je Zeile. Version-1-Dateien lassen sich weiter importieren.
 
 ## HomeMatic Dimmer (Treiber `hmdim`)
-- Schaltvariable ist die `LEVEL`-Variable (Float 0 bis 1) des Dimmerkanals, nicht `STATE`. Keine Dimm-Funktion: EIN schreibt `LEVEL = 1.0`, AUS schreibt `LEVEL = 0.0`. Jeder Wert größer 0 gilt als EIN.
+- Schaltvariable ist die `LEVEL`-Variable (Float 0 bis 1) des Dimmerkanals, nicht `STATE`. Keine Dimm-Funktion: EIN schreibt `LEVEL = 0.8`, AUS schreibt `LEVEL = 0.0`. Jeder Wert größer 0 gilt als EIN.
 - Befristetes EIN läuft über den Modul-Timer (kein natives `ON_TIME`), Time Switch, Gruppen, Betriebszeit und Kontrolle "wirklich AUS" funktionieren wie bei den anderen Treibern.
 - Bestehende Konfigurationen und Export-Dateien bleiben unverändert gültig, es kommt nur ein neuer Treiberwert hinzu.

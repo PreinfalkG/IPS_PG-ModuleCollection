@@ -110,7 +110,7 @@ final class AktorDriverHomeMatic extends AktorDriverBase
 
 /**
  * HomeMatic und HmIP Dimmer: Schaltvariable ist LEVEL (Float 0.0 bis 1.0), es gibt kein STATE.
- * Ohne Dimm-Funktion: LEVEL = 0 ist AUS, LEVEL = 1.0 ist EIN. Jeder Wert > 0 gilt als EIN
+ * Ohne Dimm-Funktion: LEVEL = 0 ist AUS, LEVEL = 0.8 ist EIN. Jeder Wert > 0 gilt als EIN
  * (alle Zustandsabfragen im Modul sind (bool)-Casts, 0.0 = false, alles andere = true).
  *
  * Kein natives ON_TIME: bei den Dimmern liegt ON_TIME (falls vorhanden) nicht auf dem Kanal der
@@ -119,7 +119,7 @@ final class AktorDriverHomeMatic extends AktorDriverBase
  */
 final class AktorDriverHomeMaticDimmer extends AktorDriverBase
 {
-    private const LEVEL_ON = 1.0;
+    private const LEVEL_ON = 0.8;
     private const LEVEL_OFF = 0.0;
 
     public function isNative(): bool
