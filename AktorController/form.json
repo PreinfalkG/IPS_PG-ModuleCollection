@@ -2,7 +2,7 @@
     "elements": [
         {
             "type": "Label",
-            "caption": "Jede Zeile beschreibt einen Aktor: die Schaltvariable (STATE) und optional eine selbst angelegte Integer-Variable 'Time Switch' (Sekunden). Die Aktion der Time-Switch-Variable wird automatisch auf diese Instanz gesetzt. Ohne Time Switch lässt sich der Aktor über die Funktionen AKTC_SwitchOn / AKTC_SwitchOff schalten."
+            "caption": "Jede Zeile beschreibt einen Aktor: die Schaltvariable (STATE, bei HomeMatic-Dimmern LEVEL) und optional eine selbst angelegte Integer-Variable 'Time Switch' (Sekunden). Die Aktion der Time-Switch-Variable wird automatisch auf diese Instanz gesetzt. Ohne Time Switch lässt sich der Aktor über die Funktionen AKTC_SwitchOn / AKTC_SwitchOff schalten."
         },
         {
             "type": "NumberSpinner",
@@ -88,7 +88,7 @@
             "rowCount": 36,
             "columns": [
                 {
-                    "caption": "Schaltvariable (STATE)",
+                    "caption": "Schaltvariable (STATE oder LEVEL)",
                     "name": "SwitchVar",
                     "width": "850px",
                     "add": 0,
@@ -107,6 +107,10 @@
                             {
                                 "caption": "HomeMatic / HmIP (natives ON_TIME)",
                                 "value": "hm"
+                            },
+                            {
+                                "caption": "HomeMatic / HmIP Dimmer (LEVEL, Modul-Timer)",
+                                "value": "hmdim"
                             },
                             {
                                 "caption": "Generisch (IP-Symcon schaltet aus)",

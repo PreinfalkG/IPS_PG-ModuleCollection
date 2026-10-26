@@ -3,7 +3,7 @@
 Neuaufbau des Moduls "Time Switch Controller". Keine Migration der alten Konfiguration, Aktoren neu anlegen.
 
 ## Funktionen
-- Aktoren normal EIN/AUS schalten, einheitlich über Treiber (`hm`, `generic`)
+- Aktoren normal EIN/AUS schalten, einheitlich über Treiber (`hm`, `hmdim`, `generic`)
 - Time Switch (optional pro Aktor): Integer-Variable in Sekunden, `0` = Aus, Dauer-EIN-Wert (Standard 999999) = EIN ohne Timer
 - Modul-Timer für alle Aktoren, auch HomeMatic (ON_TIME bleibt, Modul zählt parallel mit)
 - Restlaufzeit in der Time-Switch-Variable
@@ -46,3 +46,8 @@ Attribute `Timers`, `Verify`, `OnSince` (alle nach SwitchVar indiziert), Variabl
 - Option "Gruppenbefehle überspringen Aktoren im Zielzustand" (Standard an): AUS überspringt Aktoren, die schon aus sind und nichts offen haben. Dauer-EIN überspringt Aktoren, die schon ohne Timer ein sind. Befristetes EIN wird immer gesendet.
 - Dauert ein Gruppenbefehl länger als 5 s, gibt es eine Warnung. Die Dauer steht immer im Debug ("Gruppe X AUS: n geschaltet, m übersprungen, k fehlgeschlagen, t ms").
 - Export/Import: Version 2 enthält Gruppenliste und Gruppen je Zeile. Version-1-Dateien lassen sich weiter importieren.
+
+## HomeMatic Dimmer (Treiber `hmdim`)
+- Schaltvariable ist die `LEVEL`-Variable (Float 0 bis 1) des Dimmerkanals, nicht `STATE`. Keine Dimm-Funktion: EIN schreibt `LEVEL = 1.0`, AUS schreibt `LEVEL = 0.0`. Jeder Wert größer 0 gilt als EIN.
+- Befristetes EIN läuft über den Modul-Timer (kein natives `ON_TIME`), Time Switch, Gruppen, Betriebszeit und Kontrolle "wirklich AUS" funktionieren wie bei den anderen Treibern.
+- Bestehende Konfigurationen und Export-Dateien bleiben unverändert gültig, es kommt nur ein neuer Treiberwert hinzu.

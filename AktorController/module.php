@@ -21,6 +21,7 @@ class AktorController extends IPSModule
 
     private const DRIVERS = [
         'hm'      => AktorDriverHomeMatic::class,
+        'hmdim'   => AktorDriverHomeMaticDimmer::class,
         'generic' => AktorDriverGeneric::class,
     ];
 

@@ -109,6 +109,62 @@ final class AktorDriverHomeMatic extends AktorDriverBase
 }
 
 /**
+ * HomeMatic und HmIP Dimmer: Schaltvariable ist LEVEL (Float 0.0 bis 1.0), es gibt kein STATE.
+ * Ohne Dimm-Funktion: LEVEL = 0 ist AUS, LEVEL = 1.0 ist EIN. Jeder Wert > 0 gilt als EIN
+ * (alle Zustandsabfragen im Modul sind (bool)-Casts, 0.0 = false, alles andere = true).
+ *
+ * Kein natives ON_TIME: bei den Dimmern liegt ON_TIME (falls vorhanden) nicht auf dem Kanal der
+ * LEVEL-Variable (z. B. HM-LC-RGBW-WM: LEVEL in Kanal 1, ON_TIME in Kanal 3). Die Zeit übernimmt
+ * deshalb der Modul-Timer (isNative = false), wie bei Hue und Shelly.
+ */
+final class AktorDriverHomeMaticDimmer extends AktorDriverBase
+{
+    private const LEVEL_ON = 1.0;
+    private const LEVEL_OFF = 0.0;
+
+    public function isNative(): bool
+    {
+        return false;
+    }
+
+    public function on(int $switchVar): bool
+    {
+        return $this->writeLevel($switchVar, self::LEVEL_ON, 'EIN (Dauer)');
+    }
+
+    public function onTimed(int $switchVar, int $seconds): bool
+    {
+        return $this->writeLevel($switchVar, self::LEVEL_ON, sprintf('EIN (Modul-Timer %d s)', $seconds));
+    }
+
+    public function off(int $switchVar): bool
+    {
+        return $this->writeLevel($switchVar, self::LEVEL_OFF, 'AUS');
+    }
+
+    private function writeLevel(int $switchVar, float $value, string $what): bool
+    {
+        if (!$this->isLevelVariable($switchVar)) {
+            $this->log(sprintf('Keine HM-LEVEL-Variable (Float, Ident LEVEL) :: [%d] %s', $switchVar, IPS_GetLocation($switchVar)));
+            return false;
+        }
+        error_clear_last();
+        $ok = (bool) @HM_WriteValueFloat(IPS_GetParent($switchVar), 'LEVEL', $value);
+        $error = error_get_last();
+        $this->log(sprintf('%s LEVEL=%.1f %s%s :: [%d] %s', $what, $value, $ok ? 'OK' : 'FEHLER', $ok || $error === null ? '' : ' (' . $error['message'] . ')', $switchVar, IPS_GetLocation($switchVar)));
+        return $ok;
+    }
+
+    private function isLevelVariable(int $switchVar): bool
+    {
+        return function_exists('HM_WriteValueFloat')
+            && IPS_VariableExists($switchVar)
+            && IPS_GetVariable($switchVar)['VariableType'] === 2
+            && IPS_GetObject($switchVar)['ObjectIdent'] === 'LEVEL';
+    }
+}
+
+/**
  * Alles andere (Hue, Shelly, ...): Schalten über die Standardaktion der Variable.
  * Das Ausschalten nach Ablauf übernimmt der Timer im Modul.
  */
